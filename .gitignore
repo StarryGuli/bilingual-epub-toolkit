@@ -10,6 +10,14 @@
 # NB: gitignore has no inline comments -- keep the pattern on its own line.
 !examples/*.epub
 
+# ---------------------------------------------------------------------------
+# The original single-book script stays on the author's machine and out of the
+# repository. It hardcodes one retail edition's internal file layout and its
+# full bilingual table of contents, which is of no use to anyone else and is
+# not something to publish. The file still runs locally; it is just not tracked.
+# ---------------------------------------------------------------------------
+/contrib/
+
 # Build / packaging
 build/
 dist/
