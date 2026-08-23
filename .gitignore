@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Copyrighted material — never commit books.
+# This project processes EPUBs; the books themselves belong to their
+# publishers and must stay out of the repository. Bring your own files.
+# ---------------------------------------------------------------------------
+*.epub
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Working directories the tool creates
+out/
+split_out/
+en/
+zh/
+
+# macOS
+.DS_Store

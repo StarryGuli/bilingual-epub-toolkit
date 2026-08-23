@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bilingual-epub-toolkit"
+version = "0.1.0"
+description = "Merge two monolingual EPUBs into one tap-to-reveal bilingual EPUB, split bilingual EPUBs back apart, or re-merge with new options."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "StarryGuli" }]
+keywords = ["epub", "ebook", "bilingual", "translation", "language-learning", "alignment"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Markup",
+    "Topic :: Education",
+]
+dependencies = [
+    "lxml>=4.6",
+]
+
+[project.optional-dependencies]
+# Chinese script conversion (Traditional <-> Simplified). Only needed if you
+# pass --convert; the toolkit works fine without it for non-Chinese books.
+chinese = ["opencc-python-reimplemented>=0.1.6"]
+dev = [
+    "pytest>=7",
+    "ruff>=0.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/StarryGuli/bilingual-epub-toolkit"
+Repository = "https://github.com/StarryGuli/bilingual-epub-toolkit"
+Issues = "https://github.com/StarryGuli/bilingual-epub-toolkit/issues"
+
+[project.scripts]
+bilingual-epub = "bilingual_epub.cli:main"
+bilingual-epub-tui = "bilingual_epub.tui:main"
+bilingual-epub-web = "bilingual_epub.webui:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bilingual_epub"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/bilingual_epub",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # long lines: the CSS/JS template blobs are more readable unwrapped
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
