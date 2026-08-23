@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Split a bilingual (or any multi-language) EPUB back into independent
 monolingual EPUBs, by looking at each block's lang/xml:lang attribute.
 
@@ -64,7 +63,7 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
         base = re.sub(r'[^\w.-]+', '_', os.path.splitext(os.path.basename(epub_path))[0])
         results = {}
         for lang in keep:
-            lang_blocks = [(t, f, l) for t, f, l in blocks if (l or 'und') == lang]
+            lang_blocks = [(t, f, lg) for t, f, lg in blocks if (lg or 'und') == lang]
             if not lang_blocks:
                 continue
             level = ae.pick_level_single(lang_blocks)

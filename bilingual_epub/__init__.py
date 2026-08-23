@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """bilingual-epub-toolkit — merge, split, and re-merge bilingual EPUBs.
 
 Public API:

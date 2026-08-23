@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Local web UI for merge.py/split.py -- stdlib only, no framework.
 
 Three tabs: merge (2 monolingual -> 1 bilingual), split (1 bilingual -> N
@@ -12,7 +11,6 @@ import io
 import os
 import shutil
 import sys
-import tempfile
 import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -198,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
                     title=(form.get('title') or '').strip() or None)
                 self._register(out)
                 result = self._ok(buf, out)
-                page, tpl, ctx = MERGE_FORM, 'merge', dict(form)
+                tpl, ctx = 'merge', dict(form)
             elif p == '/split':
                 results = split_mod.split_by_lang(
                     form.get('input', '').strip(), form.get('out_dir', '').strip(),

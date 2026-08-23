@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """CLI entry point for the generic bilingual-EPUB toolkit.
 
 Three subcommands:
@@ -46,7 +45,8 @@ def cmd_split(args):
 
 
 def cmd_remerge(args):
-    import tempfile, shutil
+    import shutil
+    import tempfile
     tmp = tempfile.mkdtemp(prefix='remerge_')
     try:
         parts = split_mod.split_by_lang(args.input, os.path.join(tmp, 'parts'), workdir=tmp)

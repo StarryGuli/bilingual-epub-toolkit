@@ -5,6 +5,11 @@
 # ---------------------------------------------------------------------------
 *.epub
 
+# Exception: the sample books in examples/ are original text written for this
+# repository (see examples/sample_text.py), not a real book, so they ship.
+# NB: gitignore has no inline comments -- keep the pattern on its own line.
+!examples/*.epub
+
 # Build / packaging
 build/
 dist/

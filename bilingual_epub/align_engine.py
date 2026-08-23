@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Book-agnostic block extraction, Gale-Church paragraph alignment, and
 heading-based chapter splitting. None of this file knows what book it's
 looking at -- that's the whole point."""

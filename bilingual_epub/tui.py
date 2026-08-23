@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """交互式终端向导 —— 不用记参数，跑起来一步步问。
 
     python3 tui.py
@@ -207,10 +206,10 @@ def flow_remerge():
             return None
         print(green('找到：%s' % ', '.join(langs)))
         a_lang = choose('哪个语言当 A 侧（默认不模糊的那侧）？',
-                        [(l, l, '') for l in langs], default_idx=0)
-        rest = [l for l in langs if l != a_lang]
+                        [(lg, lg, '') for lg in langs], default_idx=0)
+        rest = [lg for lg in langs if lg != a_lang]
         b_lang = choose('哪个语言当 B 侧？',
-                        [(l, l, '') for l in rest], default_idx=0)
+                        [(lg, lg, '') for lg in rest], default_idx=0)
         blur_side, blur = ask_blur_opts()
 
         print(dim('\n重新合并中……\n'))

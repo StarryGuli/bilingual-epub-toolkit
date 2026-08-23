@@ -83,6 +83,25 @@ pip install -e ".[chinese]"
 网页版用完在终端窗口按 `Ctrl+C`（或直接关窗口）即可停止。端口默认 8799，
 被占用会自动往后找，不会报 "Address already in use"。
 
+### 先拿示例书试试
+
+仓库里带了两本**示例书**，可以立刻试，不用先去找书：
+
+```bash
+bilingual-epub merge \
+  --a examples/sample-en.epub \
+  --b examples/sample-fr.epub \
+  --out demo.epub
+```
+
+`demo.epub` 拖进苹果图书 / Apple Books（或任何支持 EPUB 3 的阅读器）就能看效果：
+英文一段，法语译文紧跟在下面、默认糊着，点一下显示。
+
+这两本是**为这个仓库现写的原创短文**（《The Lamplighter of Vellmark》，三章），
+不是真书，没有版权问题——正文在 [examples/sample_text.py](./examples/sample_text.py)，
+跟代码一样按 Apache-2.0 发布。改完那个文件跑
+`python3 examples/make_sample_books.py` 可以重新生成。
+
 ### merge：两本单语 → 一本双语
 
 ```bash
@@ -129,10 +148,11 @@ bilingual-epub-web --port 9000     # 换端口
 
 ## 关于书本身
 
-**这个仓库不包含任何书。** 工具处理的是有版权的 EPUB，书归出版社，不进仓库——
-`.gitignore` 里 `*.epub` 是全局排除的，测试用的假书也是运行时用代码现造的
-（见 [tests/conftest.py](./tests/conftest.py)），没有一个字来自真实出版物。
-自己的书自己准备。
+**这个仓库不包含任何真书。** 工具处理的是有版权的 EPUB，书归出版社，不进仓库——
+`.gitignore` 里 `*.epub` 是全局排除的，唯一的例外是 `examples/` 下那两本示例书，
+那是为这个仓库现写的原创短文（见 [examples/sample_text.py](./examples/sample_text.py)）。
+测试用的假书也是运行时用代码现造的（见 [tests/conftest.py](./tests/conftest.py)）。
+没有一个字来自真实出版物。自己的书自己准备。
 
 这个项目最早是为一本书写的：英文 *Chatter* (Ethan Kross) 配繁体中文译本
 《強大內心的自我對話習慣》。那一版把两个具体版本的内部文件名写死在代码里，

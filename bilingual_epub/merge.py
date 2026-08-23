@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Generic merge: two monolingual (or already-tagged bilingual) EPUBs -> one
 bilingual EPUB, tap-to-reveal styled. Works on any standards-compliant book --
 chapter boundaries are found automatically from heading tags, not from a

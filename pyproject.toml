@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -55,6 +55,7 @@ packages = ["bilingual_epub"]
 include = [
     "/bilingual_epub",
     "/tests",
+    "/examples",
     "/README.md",
     "/LICENSE",
 ]
@@ -66,7 +67,13 @@ target-version = "py39"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = [
-    "E501",  # long lines: the CSS/JS template blobs are more readable unwrapped
+    "E501",   # long lines: the CSS/JS template blobs are more readable unwrapped
+    # This code builds XHTML/CSS/OPF by string templating, and much of that
+    # text contains literal percent signs (max-width:100%, blur widths, the
+    # stats table). %-formatting is used consistently throughout; mechanically
+    # rewriting ~120 sites to f-strings is churn with a real chance of
+    # mangling those literals, so the style is kept on purpose.
+    "UP031",  # printf-style string formatting
 ]
 
 [tool.pytest.ini_options]

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """End-to-end tests: merge -> split -> re-merge, plus the option surface.
 
 These are the checks that caught the real bug during development (chapter
@@ -115,6 +114,32 @@ def test_cover_is_taken_from_whichever_side_has_one(en_epub, fr_epub, tmp_path):
     merge_bilingual(en_epub, fr_epub, out)   # only the EN fixture has a cover
     with zipfile.ZipFile(out) as zf:
         assert 'OEBPS/images/cover.jpg' in zf.namelist()
+
+
+def test_png_cover_keeps_its_real_media_type(en_epub_png_cover, fr_epub, tmp_path):
+    """Regression: the writer used to save every cover as cover.jpg and declare
+    it image/jpeg, so a PNG cover produced an EPUB whose manifest contradicted
+    its own bytes -- invalid, and no cover shown in strict readers."""
+    out = str(tmp_path / 'bi.epub')
+    merge_bilingual(en_epub_png_cover, fr_epub, out)
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+        assert 'OEBPS/images/cover.png' in names
+        assert 'OEBPS/images/cover.jpg' not in names
+        assert zf.read('OEBPS/images/cover.png').startswith(b'\x89PNG\r\n\x1a\n')
+        opf = zf.read('OEBPS/content.opf').decode('utf-8')
+        assert 'media-type="image/png"' in opf
+        assert 'images/cover.jpg' not in opf
+        # the cover page must point at the file that actually exists
+        assert '../images/cover.png' in zf.read('OEBPS/text/cover.xhtml').decode('utf-8')
+
+
+def test_jpeg_cover_still_works(en_epub, fr_epub, tmp_path):
+    out = str(tmp_path / 'bi.epub')
+    merge_bilingual(en_epub, fr_epub, out)
+    with zipfile.ZipFile(out) as zf:
+        assert 'OEBPS/images/cover.jpg' in zf.namelist()
+        assert 'media-type="image/jpeg"' in zf.read('OEBPS/content.opf').decode('utf-8')
 
 
 def test_title_override(en_epub, fr_epub, tmp_path):

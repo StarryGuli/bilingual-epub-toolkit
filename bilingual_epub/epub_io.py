@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Generic EPUB2/3 reading and writing helpers.
 
 Not tied to any specific book: reads any standards-compliant EPUB by walking
@@ -60,8 +59,9 @@ def extract_epub(epub_path, dest_dir):
     try:
         with zipfile.ZipFile(epub_path) as zf:
             zf.extractall(dest_dir)
-    except zipfile.BadZipFile:
-        raise SystemExit('不是合法的 EPUB(不是有效的 zip 文件，可能是下载不完整或带了 DRM): %r' % epub_path)
+    except zipfile.BadZipFile as err:
+        raise SystemExit('不是合法的 EPUB(不是有效的 zip 文件，可能是下载不完整或带了 DRM): %r'
+                         % epub_path) from err
     return dest_dir
 
 
@@ -136,7 +136,7 @@ def load(epub_path, extract_to):
         raise ValueError('EPUB 的 OPF 里没有 <spine> 条目，读不出正文顺序: %s' % epub_path)
 
     cover_href = None
-    for iid, info in manifest.items():
+    for info in manifest.values():
         if 'cover-image' in info['properties']:
             cover_href = info['href']
             break
@@ -160,13 +160,39 @@ def _esc(s):
     return _html.escape(s or '', quote=True)
 
 
+# Cover images are copied through byte-for-byte, so the manifest has to
+# describe what they actually are -- declaring a PNG as image/jpeg produces an
+# EPUB that fails validation and shows no cover in strict readers.
+_COVER_TYPES = (
+    (b'\x89PNG\r\n\x1a\n', 'png', 'image/png'),
+    (b'\xff\xd8\xff', 'jpg', 'image/jpeg'),
+    (b'GIF87a', 'gif', 'image/gif'),
+    (b'GIF89a', 'gif', 'image/gif'),
+    (b'RIFF', 'webp', 'image/webp'),          # refined below
+    (b'<?xml', 'svg', 'image/svg+xml'),
+    (b'<svg', 'svg', 'image/svg+xml'),
+)
+
+
+def sniff_cover_type(data):
+    """(extension, media_type) for raw cover bytes, defaulting to JPEG."""
+    for magic, ext, mime in _COVER_TYPES:
+        if data.startswith(magic):
+            if magic == b'RIFF':
+                if data[8:12] != b'WEBP':
+                    continue
+            return ext, mime
+    return 'jpg', 'image/jpeg'
+
+
 def write_epub(out_path, chapters, css_files, js_files, cover_bytes, meta, uid):
     """Write a fresh, generic EPUB3.
 
     chapters:  list of (cid, nav_title, xhtml_str, extra_manifest_properties)
     css_files: {'bilingual.css': css_text, ...} written under OEBPS/css/
     js_files:  {'peek.js': js_text, ...} written under OEBPS/js/ (may be {})
-    cover_bytes: raw image bytes for OEBPS/images/cover.jpg, or None
+    cover_bytes: raw cover image bytes (any common format; the type is
+                 sniffed and the manifest labelled to match), or None
     meta: {'title', 'creators': [...], 'languages': [...], 'description',
            'publisher'}
     uid: a stable string used as the book's urn:uuid identifier
@@ -192,20 +218,25 @@ def write_epub(out_path, chapters, css_files, js_files, cover_bytes, meta, uid):
                 f.write(text)
 
         has_cover = bool(cover_bytes)
+        cover_ext, cover_mime = sniff_cover_type(cover_bytes or b'')
+        cover_name = 'cover.%s' % cover_ext
         if has_cover:
-            with open(os.path.join(tmp, 'OEBPS/images/cover.jpg'), 'wb') as f:
+            with open(os.path.join(tmp, 'OEBPS/images', cover_name), 'wb') as f:
                 f.write(cover_bytes)
+            # NB: concatenation, not %-formatting -- the inline CSS contains
+            # literal percent signs (max-width:100%) that would break it.
             cover_page = ('<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n'
                 '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">\n'
                 '<head><meta charset="utf-8"/><title>Cover</title>\n'
                 '<style type="text/css">body{margin:0;padding:0;text-align:center;}'
                 'img{max-width:100%;max-height:100%;}</style></head>\n'
-                '<body epub:type="cover"><div><img src="../images/cover.jpg" alt="cover"/></div></body></html>\n')
+                '<body epub:type="cover"><div><img src="../images/' + cover_name +
+                '" alt="cover"/></div></body></html>\n')
             with open(os.path.join(tmp, 'OEBPS/text/cover.xhtml'), 'w') as f:
                 f.write(cover_page)
 
         spine = ([('cover', 'Cover')] if has_cover else []) + [(c[0], c[1]) for c in chapters]
-        for cid, title, xhtml, _props in chapters:
+        for cid, _title, xhtml, _props in chapters:
             with open(os.path.join(tmp, 'OEBPS/text/%s.xhtml' % cid), 'w') as f:
                 f.write(xhtml)
 
@@ -258,9 +289,10 @@ def write_epub(out_path, chapters, css_files, js_files, cover_bytes, meta, uid):
         for fn in js_files:
             opf.append('<item id="js-%s" href="js/%s" media-type="text/javascript"/>' % (fn, fn))
         if has_cover:
-            opf.append('<item id="cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>')
+            opf.append('<item id="cover-image" href="images/%s" media-type="%s" properties="cover-image"/>'
+                       % (cover_name, cover_mime))
             opf.append('<item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>')
-        for cid, title, xhtml, props in chapters:
+        for cid, _title, _xhtml, props in chapters:
             propattr = (' properties="%s"' % ' '.join(props)) if props else ''
             opf.append('<item id="%s" href="text/%s.xhtml" media-type="application/xhtml+xml"%s/>'
                        % (cid, cid, propattr))
