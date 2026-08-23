@@ -56,7 +56,9 @@ include = [
     "/bilingual_epub",
     "/tests",
     "/examples",
+    "/assets",
     "/README.md",
+    "/README.zh-CN.md",
     "/LICENSE",
 ]
 
