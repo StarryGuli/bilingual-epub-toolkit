@@ -9,11 +9,8 @@ Three subcommands:
            somewhere else and want it in this tool's tap-to-reveal style", or
            "same book, different blur/opencc settings")
 
-NOTE ON THE OLD Chatter-SPECIFIC SCRIPT: the version of this file that hand-
-mapped internal filenames for one specific book (Ethan Kross's *Chatter*) is
-kept as legacy_chatter_build.py for exact reproducibility of the original
-2026-07-29 output. Everything below is the generalized replacement -- see
-README.md for what "generalized" does and doesn't cover.
+Messages and help are English or Chinese, following the system locale;
+override with --lang or BILINGUAL_EPUB_LANG.
 """
 import argparse
 import os
@@ -21,6 +18,7 @@ import sys
 
 from . import merge as merge_mod
 from . import split as split_mod
+from .i18n import set_lang, t
 
 
 def cmd_merge(args):
@@ -31,14 +29,14 @@ def cmd_merge(args):
         authors=args.author.split(';') if args.author else None,
         toggle_label=args.toggle_label)
     _print_stats(stats)
-    print('\nwrote', out, os.path.getsize(out) // 1024, 'KB')
+    print(t('cli.wrote', out, os.path.getsize(out) // 1024))
 
 
 def cmd_split(args):
     langs = args.langs.split(',') if args.langs else None
     results = split_mod.split_by_lang(args.input, args.out_dir, langs=langs, workdir=args.workdir)
     if not results:
-        print('没有可拆出的内容(读不到任何带语言标记的段落)', file=sys.stderr)
+        print(t('cli.split_none'), file=sys.stderr)
         sys.exit(1)
     for lang, path in results.items():
         print('%-8s -> %s (%d KB)' % (lang, path, os.path.getsize(path) // 1024))
@@ -51,13 +49,12 @@ def cmd_remerge(args):
     try:
         parts = split_mod.split_by_lang(args.input, os.path.join(tmp, 'parts'), workdir=tmp)
         if len(parts) < 2:
-            raise SystemExit('只找到 %d 种语言(%s)，重新合并需要至少 2 种。'
-                             % (len(parts), ', '.join(parts) or '无'))
+            raise SystemExit(t('cli.too_few', len(parts), ', '.join(parts) or '-'))
         langs = sorted(parts)
         a_lang = args.a_lang or langs[0]
         b_lang = args.b_lang or (langs[1] if len(langs) > 1 else langs[0])
         if a_lang not in parts or b_lang not in parts:
-            raise SystemExit('这本书里找到的语言是 %s，--a-lang/--b-lang 得从里面选。' % ', '.join(langs))
+            raise SystemExit(t('cli.pick_from', ', '.join(langs)))
         out, stats = merge_mod.merge_bilingual(
             a_epub=parts[a_lang], b_epub=parts[b_lang], out_path=args.out, workdir=None,
             blur=args.blur, blur_side=args.blur_side, convert_side=args.convert_side,
@@ -65,57 +62,74 @@ def cmd_remerge(args):
             authors=args.author.split(';') if args.author else None,
             toggle_label=args.toggle_label)
         _print_stats(stats)
-        print('\n(拆出的语言: %s；用了 a=%s, b=%s)' % (', '.join(langs), a_lang, b_lang))
-        print('wrote', out, os.path.getsize(out) // 1024, 'KB')
+        print(t('cli.used', ', '.join(langs), a_lang, b_lang))
+        print(t('cli.wrote', out, os.path.getsize(out) // 1024))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _print_stats(stats):
-    print('%-8s %5s %5s | %5s %5s %5s %5s' %
-          ('chapter', 'A', 'B', '1:1', 'n:m', 'A-only', 'B-only'))
+    print('%-8s %5s %5s | %5s %5s %6s %6s' %
+          (t('stats.chapter'), t('stats.a'), t('stats.b'), '1:1', 'n:m',
+           t('stats.a_only'), t('stats.b_only')))
     for row in stats:
-        print('%-8s %5d %5d | %5d %5d %5d %5d' % row)
+        print('%-8s %5d %5d | %5d %5d %6d %6d' % row)
 
 
 def main(argv=None):
+    # --lang has to be honoured before the parser is built, because argparse
+    # bakes the help text in at construction time.
+    raw = list(sys.argv[1:] if argv is None else argv)
+    for i, tok in enumerate(raw):
+        if tok == '--lang' and i + 1 < len(raw):
+            set_lang(raw[i + 1])
+        elif tok.startswith('--lang='):
+            set_lang(tok.split('=', 1)[1])
+
     p = argparse.ArgumentParser(prog='bilingual-epub', description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--lang', choices=['en', 'zh'], default=None, help=t('cli.lang'))
     sub = p.add_subparsers(dest='cmd', required=True)
 
-    pm = sub.add_parser('merge', help='两本单语 EPUB -> 一本双语 EPUB(点按显示)')
-    pm.add_argument('--a', required=True, help='A 侧 EPUB 路径(默认不模糊)')
-    pm.add_argument('--b', required=True, help='B 侧 EPUB 路径(默认模糊)')
-    pm.add_argument('--out', required=True, help='输出 EPUB 路径')
-    pm.add_argument('--workdir', default=None, help='中间文件目录，默认用系统临时目录，用完自动清理')
-    pm.add_argument('--blur', default='0.25em', help='模糊程度(CSS 长度，建议用 em)，默认 0.25em')
-    pm.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b', help='模糊哪一侧，默认 b；none=不模糊')
-    pm.add_argument('--convert-side', choices=['a', 'b'], default=None, help='对哪一侧做 opencc 转换(如繁转简)')
-    pm.add_argument('--convert', default='none', help='opencc 配置，如 tw2sp/s2t，默认 none(不转换)')
-    pm.add_argument('--title', default=None, help='覆盖书名，默认拼接两侧原书名')
-    pm.add_argument('--author', default=None, help='覆盖作者(分号分隔多个)，默认合并两侧作者')
-    pm.add_argument('--toggle-label', default='Show / Hide translation', help='"全部显示/隐藏"按钮文案')
+    pm = sub.add_parser('merge', help=t('cli.merge'))
+    pm.add_argument('--a', required=True, help=t('cli.a'))
+    pm.add_argument('--b', required=True, help=t('cli.b'))
+    pm.add_argument('--out', required=True, help=t('cli.out'))
+    pm.add_argument('--workdir', default=None, help=t('cli.workdir'))
+    pm.add_argument('--blur', default='0.25em', help=t('cli.blur'))
+    pm.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b',
+                    help=t('cli.blur_side'))
+    pm.add_argument('--convert-side', choices=['a', 'b'], default=None,
+                    help=t('cli.convert_side'))
+    pm.add_argument('--convert', default='none', help=t('cli.convert'))
+    pm.add_argument('--title', default=None, help=t('cli.title'))
+    pm.add_argument('--author', default=None, help=t('cli.author'))
+    pm.add_argument('--toggle-label', default='Show / Hide translation',
+                    help=t('cli.toggle_label'))
     pm.set_defaults(func=cmd_merge, blur_side_default=True)
 
-    ps = sub.add_parser('split', help='一本双语/多语 EPUB -> 每种语言各一本单语 EPUB')
-    ps.add_argument('--in', dest='input', required=True, help='源 EPUB 路径')
-    ps.add_argument('--out-dir', required=True, help='输出目录')
-    ps.add_argument('--langs', default=None, help='只拆这些语言(逗号分隔)，默认拆出全部发现的语言')
-    ps.add_argument('--workdir', default=None)
+    ps = sub.add_parser('split', help=t('cli.split'))
+    ps.add_argument('--in', dest='input', required=True, help=t('cli.in'))
+    ps.add_argument('--out-dir', required=True, help=t('cli.out_dir'))
+    ps.add_argument('--langs', default=None, help=t('cli.langs'))
+    ps.add_argument('--workdir', default=None, help=t('cli.workdir'))
     ps.set_defaults(func=cmd_split)
 
-    pr = sub.add_parser('remerge', help='已有双语 EPUB -> 拆开重新合并成新双语 EPUB(换参数/换风格用)')
-    pr.add_argument('--in', dest='input', required=True)
-    pr.add_argument('--out', required=True)
-    pr.add_argument('--a-lang', default=None, help='选哪个语言当 A 侧，默认按发现顺序第一个')
-    pr.add_argument('--b-lang', default=None, help='选哪个语言当 B 侧(会被模糊)，默认第二个')
-    pr.add_argument('--blur', default='0.25em')
-    pr.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b')
-    pr.add_argument('--convert-side', choices=['a', 'b'], default=None)
-    pr.add_argument('--convert', default='none')
-    pr.add_argument('--title', default=None)
-    pr.add_argument('--author', default=None)
-    pr.add_argument('--toggle-label', default='Show / Hide translation')
+    pr = sub.add_parser('remerge', help=t('cli.remerge'))
+    pr.add_argument('--in', dest='input', required=True, help=t('cli.in'))
+    pr.add_argument('--out', required=True, help=t('cli.out'))
+    pr.add_argument('--a-lang', default=None, help=t('cli.a_lang'))
+    pr.add_argument('--b-lang', default=None, help=t('cli.b_lang'))
+    pr.add_argument('--blur', default='0.25em', help=t('cli.blur'))
+    pr.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b',
+                    help=t('cli.blur_side'))
+    pr.add_argument('--convert-side', choices=['a', 'b'], default=None,
+                    help=t('cli.convert_side'))
+    pr.add_argument('--convert', default='none', help=t('cli.convert'))
+    pr.add_argument('--title', default=None, help=t('cli.title'))
+    pr.add_argument('--author', default=None, help=t('cli.author'))
+    pr.add_argument('--toggle-label', default='Show / Hide translation',
+                    help=t('cli.toggle_label'))
     pr.set_defaults(func=cmd_remerge)
 
     args = p.parse_args(argv)

@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from . import merge as merge_mod
 from . import split as split_mod
+from .i18n import get_lang, set_lang, t
 
 HOST, PORT = '127.0.0.1', 8799
 MAX_UPLOAD = 200 * 1024 * 1024      # generous; these are books, not videos
@@ -84,6 +85,17 @@ body {
 
 /* ---- masthead ---------------------------------------------------------- */
 header { margin-bottom: 1.75rem; }
+
+.topline { display: flex; align-items: flex-start; justify-content: space-between;
+           gap: 1rem; flex-wrap: wrap; }
+.lang-switch {
+  flex: none; margin-top: .35rem; padding: .3rem .7rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--ink-soft); text-decoration: none;
+  font-size: .8rem; font-weight: 500;
+  transition: border-color .16s ease, color .16s ease;
+}
+.lang-switch:hover { border-color: var(--accent); color: var(--accent); }
 
 .brand {
   display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap;
@@ -289,7 +301,7 @@ function wireDrop(zone) {
     if (f) {
       zone.classList.add('filled');
       main.textContent = f.name;
-      sub.textContent = (f.size / 1048576).toFixed(1) + ' MB · 会上传到本机服务器';
+      sub.textContent = (f.size / 1048576).toFixed(1) + ' MB \u00b7 ' + L.uploaded;
       clear.hidden = false;
     } else {
       zone.classList.remove('filled');
@@ -350,7 +362,7 @@ $$('form').forEach(wirePreview);
 /* ---- submit ---- */
 function statsTable(rows) {
   if (!rows || !rows.length) return '';
-  const head = ['章节', 'A 段', 'B 段', '1:1', 'n:m', '仅 A', '仅 B'];
+  const head = [L.chapter, L.a, L.b, '1:1', 'n:m', L.aOnly, L.bOnly];
   const th = head.map(h => '<th>' + h + '</th>').join('');
   const tr = rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('');
   return '<div class="scroller"><table class="stats"><thead><tr>' + th +
@@ -380,11 +392,11 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
         (data.log ? '<pre>' + esc(data.log) + '</pre>' : '') +
         links + '</div>';
     } else {
-      out.innerHTML = '<div class="card bad"><h3>没能完成</h3><pre>' +
+      out.innerHTML = '<div class="card bad"><h3>' + esc(L.failed) + '</h3><pre>' +
         esc(data.error) + '</pre></div>';
     }
   } catch (err) {
-    out.innerHTML = '<div class="card bad"><h3>请求失败</h3><pre>' +
+    out.innerHTML = '<div class="card bad"><h3>' + esc(L.reqFailed) + '</h3><pre>' +
       esc(err) + '</pre></div>';
   } finally {
     btn.disabled = false; btn.classList.remove('busy');
@@ -396,131 +408,156 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
 def _drop(name, main, sub):
     return (
         '<div class="drop">'
-        '<button type="button" class="clear" hidden aria-label="清除所选文件">&times;</button>'
+        '<button type="button" class="clear" hidden aria-label="' + t('web.clear') + '">&times;</button>'
         '<input type="file" name="' + name + '" accept=".epub,application/epub+zip">'
-        '<span class="ico">📕</span>'
+        '<span class="ico">\U0001F4D5</span>'
         '<span class="main">' + main + '</span>'
         '<span class="sub">' + sub + '</span>'
+        '</div>')
+
+
+def _file_field(label, file_name, path_name, placeholder, drop_label=None):
+    return (
+        '<div class="field"><label>' + label + '</label>'
+        + _drop(file_name, drop_label or t('web.drop'), t('web.drop.sub'))
+        + '<div class="or">' + t('web.drop.or_path') + '</div>'
+        '<input type="text" name="' + path_name + '" placeholder="' + placeholder + '">'
         '</div>')
 
 
 def _blur_controls():
     return (
         '<div class="grid">'
-        '<div class="field"><label>模糊哪一侧</label>'
+        '<div class="field"><label>' + t('web.blur.which') + '</label>'
         '<select name="blur_side">'
-        '<option value="b" selected>B 侧（译文）</option>'
-        '<option value="a">A 侧（原文）</option>'
-        '<option value="none">都不模糊</option>'
+        '<option value="b" selected>' + t('web.blur.b') + '</option>'
+        '<option value="a">' + t('web.blur.a') + '</option>'
+        '<option value="none">' + t('web.blur.none') + '</option>'
         '</select></div>'
-        '<div class="field"><label>模糊程度</label>'
+        '<div class="field"><label>' + t('web.blur.amount') + '</label>'
         '<input type="text" name="blur" value="0.25em">'
-        '<span class="hint">CSS 长度，建议用 em，会跟随字号缩放</span></div>'
+        '<span class="hint">' + t('web.blur.hint') + '</span></div>'
         '</div>'
         '<div class="preview blur-b">'
-        '<div class="cap">效果预览</div>'
+        '<div class="cap">' + t('web.preview') + '</div>'
         '<p class="a">It was a bright cold day in the invented town.</p>'
-        '<p class="b">C’était une journée froide et lumineuse dans la ville inventée.</p>'
+        '<p class="b">C\u2019\u00e9tait une journ\u00e9e froide et lumineuse dans la ville invent\u00e9e.</p>'
         '</div>')
 
 
-MERGE_PANEL = (
-    '<div class="panel on" id="panel-merge">'
-    '<p class="lead">两本单语 EPUB 合成一本对照书：A 侧一段，B 侧对应的一段紧跟在下面，'
-    '默认糊住，点一下显示。</p>'
-    '<form action="/api/merge">'
-    '<div class="grid">'
-    '<div class="field"><label>A 侧（原文）</label>'
-    + _drop('a_file', '拖一本 EPUB 到这里', '或点击选择')
-    + '<div class="or">或填本机路径</div>'
-    '<input type="text" name="a_path" placeholder="/path/to/english.epub"></div>'
-    '<div class="field"><label>B 侧（译文）</label>'
-    + _drop('b_file', '拖一本 EPUB 到这里', '或点击选择')
-    + '<div class="or">或填本机路径</div>'
-    '<input type="text" name="b_path" placeholder="/path/to/other-language.epub"></div>'
-    '</div>'
-    + _blur_controls() +
-    '<div class="grid">'
-    '<div class="field"><label>opencc 转换（可选）</label>'
-    '<select name="convert_side">'
-    '<option value="">不转换</option>'
-    '<option value="a">转换 A 侧</option>'
-    '<option value="b">转换 B 侧</option>'
-    '</select><span class="hint">中文繁简转换，需装 opencc</span></div>'
-    '<div class="field"><label>opencc 配置</label>'
-    '<input type="text" name="convert" value="none" placeholder="tw2sp / s2t">'
-    '<span class="hint">例：tw2sp 繁转简</span></div>'
-    '</div>'
-    '<div class="field"><label>书名（可选）</label>'
-    '<input type="text" name="title" placeholder="留空则自动拼接两侧书名"></div>'
-    '<button class="go" type="submit"><span class="spinner"></span>合并成对照书</button>'
-    '</form><div class="result"></div></div>')
+def _merge_panel():
+    return (
+        '<div class="panel on" id="panel-merge">'
+        '<p class="lead">' + t('web.merge.lead') + '</p>'
+        '<form action="/api/merge">'
+        '<div class="grid">'
+        + _file_field(t('web.side.a'), 'a_file', 'a_path', '/path/to/english.epub')
+        + _file_field(t('web.side.b'), 'b_file', 'b_path', '/path/to/other-language.epub')
+        + '</div>'
+        + _blur_controls() +
+        '<div class="grid">'
+        '<div class="field"><label>' + t('web.cc.label') + '</label>'
+        '<select name="convert_side">'
+        '<option value="">' + t('web.cc.none') + '</option>'
+        '<option value="a">' + t('web.cc.a') + '</option>'
+        '<option value="b">' + t('web.cc.b') + '</option>'
+        '</select><span class="hint">' + t('web.cc.hint') + '</span></div>'
+        '<div class="field"><label>' + t('web.cc.cfg') + '</label>'
+        '<input type="text" name="convert" value="none" placeholder="tw2sp / s2t">'
+        '<span class="hint">' + t('web.cc.cfg_hint') + '</span></div>'
+        '</div>'
+        '<div class="field"><label>' + t('web.title') + '</label>'
+        '<input type="text" name="title" placeholder="' + t('web.title.ph') + '"></div>'
+        '<button class="go" type="submit"><span class="spinner"></span>'
+        + t('web.go.merge') + '</button>'
+        '</form><div class="result"></div></div>')
 
-SPLIT_PANEL = (
-    '<div class="panel" id="panel-split">'
-    '<p class="lead">把一本双语（或多语）EPUB 按语言拆开，每种语言各出一本单语书。'
-    '靠每段的 <code>lang</code> 属性判断归属。</p>'
-    '<form action="/api/split">'
-    '<div class="field"><label>源 EPUB</label>'
-    + _drop('in_file', '拖一本双语 EPUB 到这里', '或点击选择')
-    + '<div class="or">或填本机路径</div>'
-    '<input type="text" name="in_path" placeholder="/path/to/bilingual.epub"></div>'
-    '<div class="field"><label>只拆这些语言（可选）</label>'
-    '<input type="text" name="langs" placeholder="en,fr">'
-    '<span class="hint">逗号分隔；留空则拆出全部识别到的语言</span></div>'
-    '<button class="go" type="submit"><span class="spinner"></span>拆分</button>'
-    '</form><div class="result"></div></div>')
 
-REMERGE_PANEL = (
-    '<div class="panel" id="panel-remerge">'
-    '<p class="lead">已经有一本双语书，想换个模糊程度、换糊哪一侧，或者把别处来的'
-    '双语书转成这个工具的点按显示风格——先拆再合，这里一步完成。</p>'
-    '<form action="/api/remerge">'
-    '<div class="field"><label>源双语 EPUB</label>'
-    + _drop('in_file', '拖一本双语 EPUB 到这里', '或点击选择')
-    + '<div class="or">或填本机路径</div>'
-    '<input type="text" name="in_path" placeholder="/path/to/bilingual.epub"></div>'
-    '<div class="grid">'
-    '<div class="field"><label>A 侧语言代码</label>'
-    '<input type="text" name="a_lang" placeholder="en">'
-    '<span class="hint">留空＝取识别到的第一种</span></div>'
-    '<div class="field"><label>B 侧语言代码</label>'
-    '<input type="text" name="b_lang" placeholder="fr">'
-    '<span class="hint">留空＝取第二种</span></div>'
-    '</div>'
-    + _blur_controls() +
-    '<button class="go" type="submit"><span class="spinner"></span>重新合并</button>'
-    '</form><div class="result"></div></div>')
+def _split_panel():
+    return (
+        '<div class="panel" id="panel-split">'
+        '<p class="lead">' + t('web.split.lead') + '</p>'
+        '<form action="/api/split">'
+        + _file_field(t('web.src'), 'in_file', 'in_path',
+                      '/path/to/bilingual.epub', t('web.drop.bi'))
+        + '<div class="field"><label>' + t('web.langs') + '</label>'
+        '<input type="text" name="langs" placeholder="en,fr">'
+        '<span class="hint">' + t('web.langs.hint') + '</span></div>'
+        '<button class="go" type="submit"><span class="spinner"></span>'
+        + t('web.go.split') + '</button>'
+        '</form><div class="result"></div></div>')
+
+
+def _remerge_panel():
+    return (
+        '<div class="panel" id="panel-remerge">'
+        '<p class="lead">' + t('web.remerge.lead') + '</p>'
+        '<form action="/api/remerge">'
+        + _file_field(t('web.src.bi'), 'in_file', 'in_path',
+                      '/path/to/bilingual.epub', t('web.drop.bi'))
+        + '<div class="grid">'
+        '<div class="field"><label>' + t('web.alang') + '</label>'
+        '<input type="text" name="a_lang" placeholder="en">'
+        '<span class="hint">' + t('web.alang.hint') + '</span></div>'
+        '<div class="field"><label>' + t('web.blang') + '</label>'
+        '<input type="text" name="b_lang" placeholder="fr">'
+        '<span class="hint">' + t('web.blang.hint') + '</span></div>'
+        '</div>'
+        + _blur_controls() +
+        '<button class="go" type="submit"><span class="spinner"></span>'
+        + t('web.go.remerge') + '</button>'
+        '</form><div class="result"></div></div>')
+
 
 PAGE = (
-    '<!doctype html><html lang="zh-CN"><head>'
+    '<!doctype html><html lang="__HTMLLANG__"><head>'
     '<meta charset="utf-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
     '<meta name="color-scheme" content="light dark">'
     '<title>Bilingual EPUB Toolkit</title>'
     '<style>__CSS__</style></head><body><div class="wrap">'
     '<header>'
-    '<h1 class="brand"><span class="mark">A | 文</span> Bilingual EPUB Toolkit</h1>'
-    '<p class="tagline">两本单语书合成一本点按显示的对照书，也能反过来拆开。</p>'
-    '<span class="local-note"><span class="dot"></span>只在本机运行，文件不出这台电脑</span>'
+    '<div class="topline">'
+    '<h1 class="brand"><span class="mark">A | \u6587</span> Bilingual EPUB Toolkit</h1>'
+    '<a class="lang-switch" href="?lang=__OTHERLANG__">__SWITCH__</a>'
+    '</div>'
+    '<p class="tagline">__TAGLINE__</p>'
+    '<span class="local-note"><span class="dot"></span>__LOCAL__</span>'
     '</header>'
     '<div class="tabs" role="tablist">'
-    '<button class="tab" data-tab="merge" role="tab" aria-selected="true">合并</button>'
-    '<button class="tab" data-tab="split" role="tab" aria-selected="false">拆分</button>'
-    '<button class="tab" data-tab="remerge" role="tab" aria-selected="false">重新合并</button>'
+    '<button class="tab" data-tab="merge" role="tab" aria-selected="true">__T_MERGE__</button>'
+    '<button class="tab" data-tab="split" role="tab" aria-selected="false">__T_SPLIT__</button>'
+    '<button class="tab" data-tab="remerge" role="tab" aria-selected="false">__T_REMERGE__</button>'
     '</div>'
     '__MERGE__' '__SPLIT__' '__REMERGE__'
-    '<footer>任意标准 EPUB 都能处理，DRM 加密的除外。'
-    '用完在启动它的终端窗口按 Ctrl+C 停止。</footer>'
-    '</div><script>__JS__</script></body></html>')
+    '<footer>__FOOTER__</footer>'
+    '</div><script>const L=__LABELS__;</script><script>__JS__</script></body></html>')
 
 
 def render_page():
+    """Render the whole page in the currently selected language."""
+    lang = get_lang()
+    labels = json.dumps({
+        'chapter': t('web.res.chapter'), 'a': t('web.res.a'), 'b': t('web.res.b'),
+        'aOnly': t('web.res.a_only'), 'bOnly': t('web.res.b_only'),
+        'failed': t('web.res.failed'), 'reqFailed': t('web.res.reqfail'),
+        'uploaded': t('web.uploaded'),
+    }, ensure_ascii=False)
     return (PAGE
             .replace('__CSS__', CSS)
-            .replace('__MERGE__', MERGE_PANEL)
-            .replace('__SPLIT__', SPLIT_PANEL)
-            .replace('__REMERGE__', REMERGE_PANEL)
+            .replace('__HTMLLANG__', 'zh-CN' if lang == 'zh' else 'en')
+            .replace('__OTHERLANG__', 'en' if lang == 'zh' else 'zh')
+            .replace('__SWITCH__', t('web.switch'))
+            .replace('__TAGLINE__', t('app.tagline'))
+            .replace('__LOCAL__', t('app.local_only'))
+            .replace('__T_MERGE__', t('web.tab.merge'))
+            .replace('__T_SPLIT__', t('web.tab.split'))
+            .replace('__T_REMERGE__', t('web.tab.remerge'))
+            .replace('__FOOTER__', t('web.footer'))
+            .replace('__MERGE__', _merge_panel())
+            .replace('__SPLIT__', _split_panel())
+            .replace('__REMERGE__', _remerge_panel())
+            .replace('__LABELS__', labels)
             .replace('__JS__', JS))
 
 
@@ -608,9 +645,9 @@ class Handler(BaseHTTPRequestHandler):
         typed = (fields.get(path_key) or '').strip()
         if typed:
             if not os.path.exists(typed):
-                raise SystemExit('%s：找不到这个文件 —— %s' % (label, typed))
+                raise SystemExit(t('web.no_such', label, typed))
             return typed
-        raise SystemExit('%s：请拖一个 EPUB 进来，或者填一个本机路径。' % label)
+        raise SystemExit(t('web.need_file', label))
 
     def _out_path(self, stem):
         return os.path.join(self.server.outputs, stem)
@@ -619,6 +656,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         if p.path == '/':
+            # ?lang=en|zh switches the page language for the rest of the session
+            want = urllib.parse.parse_qs(p.query).get('lang', [''])[0]
+            if want in ('en', 'zh'):
+                set_lang(want)
             self._send(render_page())
         elif p.path == '/download':
             token = urllib.parse.parse_qs(p.query).get('id', [''])[0]
@@ -644,8 +685,8 @@ class Handler(BaseHTTPRequestHandler):
         ctype = self.headers.get('Content-Type', '')
         length = int(self.headers.get('Content-Length', 0) or 0)
         if length > MAX_UPLOAD:
-            self._json({'ok': False, 'error': '文件太大了（上限 %d MB）。'
-                                              % (MAX_UPLOAD // 1048576)}, status=413)
+            self._json({'ok': False,
+                        'error': t('web.too_big', MAX_UPLOAD // 1048576)}, status=413)
             return
         body = self.rfile.read(length) if length else b''
         if 'multipart/form-data' in ctype and 'boundary=' in ctype:
@@ -672,8 +713,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- the three operations ------------------------------------------- #
     def _do_merge(self, fields, files):
-        a = self._source(fields, files, 'a_file', 'a_path', 'A 侧')
-        b = self._source(fields, files, 'b_file', 'b_path', 'B 侧')
+        a = self._source(fields, files, 'a_file', 'a_path', t('web.side.a'))
+        b = self._source(fields, files, 'b_file', 'b_path', t('web.side.b'))
         out = self._out_path('bilingual.epub')
         out, stats = merge_mod.merge_bilingual(
             a_epub=a, b_epub=b, out_path=out,
@@ -682,18 +723,18 @@ class Handler(BaseHTTPRequestHandler):
             convert_side=(fields.get('convert_side') or '').strip() or None,
             cc_config=(fields.get('convert') or 'none').strip() or 'none',
             title=(fields.get('title') or '').strip() or None)
-        return {'title': '合并完成', 'stats': [list(r) for r in stats],
+        return {'title': t('web.ok.merge'), 'stats': [list(r) for r in stats],
                 'files': [self._offer(out)]}
 
     def _do_split(self, fields, files):
-        src = self._source(fields, files, 'in_file', 'in_path', '源 EPUB')
+        src = self._source(fields, files, 'in_file', 'in_path', t('web.src'))
         langs = [s.strip() for s in (fields.get('langs') or '').split(',') if s.strip()]
         results = split_mod.split_by_lang(src, self.server.outputs, langs=langs or None)
-        return {'title': '拆出 %d 种语言：%s' % (len(results), '、'.join(sorted(results))),
+        return {'title': t('web.ok.split', len(results), ', '.join(sorted(results))),
                 'files': [self._offer(p) for p in results.values()]}
 
     def _do_remerge(self, fields, files):
-        src = self._source(fields, files, 'in_file', 'in_path', '源双语 EPUB')
+        src = self._source(fields, files, 'in_file', 'in_path', t('web.src.bi'))
         tmp = tempfile.mkdtemp(prefix='remerge_')
         try:
             parts = split_mod.split_by_lang(src, os.path.join(tmp, 'parts'), workdir=tmp)
@@ -702,8 +743,7 @@ class Handler(BaseHTTPRequestHandler):
             b_lang = (fields.get('b_lang') or '').strip() or (
                 found[1] if len(found) > 1 else None)
             if not a_lang or not b_lang or a_lang not in parts or b_lang not in parts:
-                raise SystemExit('这本书里识别到的语言是：%s —— A/B 必须从里面选。'
-                                 % '、'.join(found))
+                raise SystemExit(t('web.pick_from', ', '.join(found)))
             out = self._out_path('remerged.epub')
             out, stats = merge_mod.merge_bilingual(
                 a_epub=parts[a_lang], b_epub=parts[b_lang], out_path=out,
@@ -711,8 +751,8 @@ class Handler(BaseHTTPRequestHandler):
                 blur_side=fields.get('blur_side', 'b'))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        return {'title': '重新合并完成',
-                'note': '识别到的语言：%s（A=%s，B=%s）' % ('、'.join(found), a_lang, b_lang),
+        return {'title': t('web.ok.remerge'),
+                'note': t('web.found_langs', ', '.join(found), a_lang, b_lang),
                 'stats': [list(r) for r in stats], 'files': [self._offer(out)]}
 
 
@@ -721,12 +761,17 @@ def main():
     import threading
     import webbrowser
 
-    ap = argparse.ArgumentParser(description='双语 EPUB 工具箱的本地网页界面')
-    ap.add_argument('--port', type=int, default=PORT, help='端口，默认 %d' % PORT)
-    ap.add_argument('--no-browser', action='store_true', help='不要自动打开浏览器')
+    ap = argparse.ArgumentParser(prog='bilingual-epub-web', description=t('cli.web_desc'))
+    ap.add_argument('--port', type=int, default=PORT, help=t('cli.web_port', PORT))
+    ap.add_argument('--no-browser', action='store_true', help=t('cli.web_nobrowser'))
+    ap.add_argument('--lang', choices=['en', 'zh'], default=None,
+                    help='interface language / 界面语言')
     args = ap.parse_args()
+    if args.lang:
+        set_lang(args.lang)
 
-    # 端口被占就往后找，别让“已经有一个在跑”变成一句 Address already in use
+    # walk forward if the port is taken, so "one is already running" does not
+    # surface as a bare Address already in use
     srv, port = None, args.port
     for candidate in range(args.port, args.port + 20):
         try:
@@ -736,11 +781,10 @@ def main():
         except OSError:
             continue
     if srv is None:
-        print('端口 %d~%d 都被占用了，用 --port 指定一个别的。'
-              % (args.port, args.port + 19), file=sys.stderr)
+        print(t('web.busy_ports', args.port, args.port + 19), file=sys.stderr)
         return 1
     if port != args.port:
-        print('（%d 被占用了，改用 %d）' % (args.port, port))
+        print(t('web.moved_port', args.port, port))
 
     workdir = tempfile.mkdtemp(prefix='bilingual_web_')
     srv.uploads = os.path.join(workdir, 'uploads')
@@ -750,19 +794,20 @@ def main():
     srv.offered = {}
 
     url = 'http://%s:%d' % (HOST, port)
-    print('\n  📖  双语 EPUB 工具箱')
+    print('\n  \U0001F4D6  %s' % t('app.name'))
     print('  %s' % url)
-    print('  浏览器应该会自动打开；没有的话手动把上面这行地址复制进去。')
-    print('  用完在这个窗口按 Ctrl+C 关掉。\n')
+    print(t('web.open_hint'))
+    print(t('web.stop_hint'))
 
     if not args.no_browser:
-        # 等服务器真正开始监听再开浏览器，否则可能抢在前面吃到连接失败
+        # wait until the server is really listening before opening a browser,
+        # otherwise it can race ahead and hit a connection error
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
 
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print('\n已停止。')
+        print(t('web.stopped'))
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
     return 0
