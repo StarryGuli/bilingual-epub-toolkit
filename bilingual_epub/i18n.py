@@ -286,6 +286,19 @@ STRINGS = {
     'web.pick_from':     ('The languages in this book are %s -- A and B must come '
                           'from that list.',
                           '这本书里识别到的语言是：%s —— A/B 必须从里面选。'),
+    'web.pv.sources':    ('goes in', '放进去的'),
+    'web.pv.result':     ('comes out', '出来的'),
+    'web.pv.merge':      ('merge', '合并'),
+    'web.pv.split':      ('split', '拆分'),
+    'web.pv.remerge':    ('remerge', '重新合并'),
+    'web.pv.tap':        ('tap a blurred line to reveal it',
+                          '点糊住的那行就会显示'),
+    'web.pv.live':       ('This is the sample pair in examples/ -- the blur below '
+                          'follows the settings on the left.',
+                          '这就是 examples/ 里那两本示例书；下面的模糊程度跟着左边的'
+                          '设置实时变化。'),
+    'web.pv.static':     ('This is the sample pair in examples/.',
+                          '这就是 examples/ 里那两本示例书。'),
     'web.busy_ports':    ('Ports %d-%d are all taken; pick another with --port.',
                           '端口 %d~%d 都被占用了，用 --port 指定一个别的。'),
     'web.moved_port':    ('(%d was busy, using %d instead)', '（%d 被占用了，改用 %d）'),

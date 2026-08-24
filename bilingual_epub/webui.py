@@ -81,7 +81,17 @@ body {
         "Hiragino Sans GB", "Microsoft Yahei", sans-serif;
 }
 
-.wrap { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+@media (max-width: 900px) { .wrap { padding: 2rem 1.15rem 4rem; } }
+
+/* On a wide screen the form takes the left and the preview sits beside it
+   instead of leaving half the monitor empty; below 1040px they stack. */
+.panel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+@media (min-width: 1040px) {
+  .panel-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                align-items: start; gap: 2.5rem; }
+  .side { position: sticky; top: 1.5rem; }
+}
 
 /* ---- masthead ---------------------------------------------------------- */
 header { margin-bottom: 1.75rem; }
@@ -106,7 +116,7 @@ header { margin-bottom: 1.75rem; }
   font-family: Georgia, "Songti SC", serif;
   font-size: 1.75rem; line-height: 1; color: var(--accent);
 }
-.tagline { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+.tagline { margin: 0; max-width: 62ch; color: var(--ink-soft); font-size: .95rem; }
 
 .local-note {
   display: inline-flex; align-items: center; gap: .4rem;
@@ -140,7 +150,7 @@ header { margin-bottom: 1.75rem; }
 .panel.on { display: block; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-.lead { color: var(--ink-soft); font-size: .93rem; margin: 1.4rem 0 0; }
+.lead { max-width: 68ch; color: var(--ink-soft); font-size: .93rem; margin: 1.4rem 0 0; }
 
 form { margin-top: 1.4rem; }
 
@@ -198,19 +208,49 @@ select { appearance: none; cursor: pointer;
       margin: .55rem 0; color: var(--ink-soft); font-size: .76rem; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
-/* ---- live blur preview ------------------------------------------------- */
-.preview {
-  margin-top: .5rem; padding: .9rem 1rem;
+/* ---- live before/after preview ----------------------------------------- */
+.cap { font-size: .74rem; color: var(--ink-soft); font-weight: 600;
+       text-transform: uppercase; letter-spacing: .07em; }
+.pv-note { margin: .35rem 0 .9rem; color: var(--ink-soft); font-size: .8rem;
+           line-height: 1.5; }
+
+.pv-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+@media (max-width: 460px) { .pv-pair { grid-template-columns: 1fr; } }
+
+.book {
   background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 10px; padding: .7rem .8rem; min-width: 0;
 }
-.preview .cap { font-size: .74rem; color: var(--ink-soft);
-                text-transform: uppercase; letter-spacing: .06em; margin-bottom: .5rem; }
-.preview p { margin: .2rem 0; font-size: .88rem; }
+.book-h {
+  display: flex; align-items: center; gap: .4rem;
+  margin-bottom: .5rem; padding-bottom: .45rem;
+  border-bottom: 1px solid var(--line);
+  font-size: .73rem; font-weight: 600; color: var(--ink-soft);
+}
+.book-h .tag {
+  padding: .05rem .35rem; border-radius: 4px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: .66rem; letter-spacing: .04em;
+}
+.book p { margin: .3rem 0; font-size: .8rem; line-height: 1.55; }
+.book.out { border-color: var(--accent); }
+.book.out p { font-size: .84rem; }
+
+.pv-flow {
+  display: flex; align-items: center; gap: .6rem;
+  margin: .8rem 0; color: var(--ink-soft); font-size: .76rem; font-weight: 600;
+}
+.pv-flow::before, .pv-flow::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.pv-flow .op {
+  padding: .2rem .6rem; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+}
+
 .preview .a { color: var(--ink); }
-.preview .b { color: var(--ink); transition: filter .2s ease, opacity .2s ease; }
+.preview .b { color: var(--ink); transition: filter .22s ease; }
 .preview.blur-b .b { filter: blur(var(--blur, .25em)); }
 .preview.blur-a .a { filter: blur(var(--blur, .25em)); }
+.pv-tap { margin-top: .6rem; color: var(--ink-soft); font-size: .74rem; text-align: center; }
 
 /* ---- button ------------------------------------------------------------ */
 .go {
@@ -266,6 +306,14 @@ pre { margin: .6rem 0 0; padding: .8rem; overflow-x: auto;
 
 footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
          color: var(--ink-soft); font-size: .8rem; }
+
+/* phone/tablet landscape: the viewport is short, so give the masthead less of it */
+@media (max-height: 520px) and (orientation: landscape) {
+  .wrap { padding-top: 1.1rem; }
+  header { margin-bottom: 1rem; }
+  .brand { font-size: 1.25rem; }
+  .tagline, .local-note { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important;
@@ -425,6 +473,24 @@ def _file_field(label, file_name, path_name, placeholder, drop_label=None):
         '</div>')
 
 
+# Real lines from the sample books in examples/, so the preview shows exactly
+# what the documented one-command demo produces.
+PV_EN = ['Vellmark had four hundred lamps, and Ida lit every one of them.',
+         'Nobody had asked her to take the job.']
+PV_FR = ['Vellmark comptait quatre cents r\u00e9verb\u00e8res, et Ida les allumait tous.',
+         'Personne ne lui avait demand\u00e9 de prendre ce travail.']
+
+
+def _book(name, tag, paras, cls='', para_cls=''):
+    body = ''.join('<p class="%s">%s</p>' % (para_cls, p) for p in paras)
+    return ('<div class="book ' + cls + '"><div class="book-h">'
+            '<span class="tag">' + tag + '</span>' + name + '</div>' + body + '</div>')
+
+
+def _flow(op):
+    return '<div class="pv-flow"><span class="op">' + op + '</span></div>'
+
+
 def _blur_controls():
     return (
         '<div class="grid">'
@@ -437,19 +503,90 @@ def _blur_controls():
         '<div class="field"><label>' + t('web.blur.amount') + '</label>'
         '<input type="text" name="blur" value="0.25em">'
         '<span class="hint">' + t('web.blur.hint') + '</span></div>'
-        '</div>'
-        '<div class="preview blur-b">'
-        '<div class="cap">' + t('web.preview') + '</div>'
-        '<p class="a">It was a bright cold day in the invented town.</p>'
-        '<p class="b">C\u2019\u00e9tait une journ\u00e9e froide et lumineuse dans la ville invent\u00e9e.</p>'
         '</div>')
+
+
+def _merge_preview():
+    """Two source books in, one facing-text book out -- the b side reacts live
+    to the blur controls."""
+    interleaved = []
+    for en, fr in zip(PV_EN, PV_FR):
+        interleaved.append('<p class="a">' + en + '</p>')
+        interleaved.append('<p class="b">' + fr + '</p>')
+    return (
+        '<aside class="side">'
+        '<div class="cap">' + t('web.pv.sources') + '</div>'
+        '<p class="pv-note">' + t('web.pv.live') + '</p>'
+        '<div class="pv-pair">'
+        + _book('sample-en.epub', 'EN', PV_EN)
+        + _book('sample-fr.epub', 'FR', PV_FR)
+        + '</div>'
+        + _flow(t('web.pv.merge')) +
+        '<div class="cap">' + t('web.pv.result') + '</div>'
+        '<div class="book out preview blur-b" style="margin-top:.5rem">'
+        '<div class="book-h"><span class="tag">EN + FR</span>bilingual.epub</div>'
+        + ''.join(interleaved) +
+        '</div>'
+        '<p class="pv-tap">' + t('web.pv.tap') + '</p>'
+        '</aside>')
+
+
+def _split_preview():
+    """One bilingual book in, one book per language out."""
+    mixed = []
+    for en, fr in zip(PV_EN, PV_FR):
+        mixed.append('<p class="a">' + en + '</p>')
+        mixed.append('<p class="b">' + fr + '</p>')
+    return (
+        '<aside class="side">'
+        '<div class="cap">' + t('web.pv.sources') + '</div>'
+        '<p class="pv-note">' + t('web.pv.static') + '</p>'
+        '<div class="book"><div class="book-h">'
+        '<span class="tag">EN + FR</span>bilingual.epub</div>'
+        + ''.join(mixed) +
+        '</div>'
+        + _flow(t('web.pv.split')) +
+        '<div class="cap">' + t('web.pv.result') + '</div>'
+        '<div class="pv-pair" style="margin-top:.5rem">'
+        + _book('bilingual.en.epub', 'EN', PV_EN, cls='out')
+        + _book('bilingual.fr.epub', 'FR', PV_FR, cls='out')
+        + '</div>'
+        '</aside>')
+
+
+def _remerge_preview():
+    """One bilingual book in, the same book restyled out."""
+    rows = []
+    for en, fr in zip(PV_EN, PV_FR):
+        rows.append('<p class="a">' + en + '</p>')
+        rows.append('<p class="b">' + fr + '</p>')
+    plain = []
+    for en, fr in zip(PV_EN, PV_FR):
+        plain.append('<p>' + en + '</p>')
+        plain.append('<p>' + fr + '</p>')
+    return (
+        '<aside class="side">'
+        '<div class="cap">' + t('web.pv.sources') + '</div>'
+        '<p class="pv-note">' + t('web.pv.live') + '</p>'
+        '<div class="book"><div class="book-h">'
+        '<span class="tag">EN + FR</span>bilingual.epub</div>'
+        + ''.join(plain) +
+        '</div>'
+        + _flow(t('web.pv.remerge')) +
+        '<div class="cap">' + t('web.pv.result') + '</div>'
+        '<div class="book out preview blur-b" style="margin-top:.5rem">'
+        '<div class="book-h"><span class="tag">EN + FR</span>remerged.epub</div>'
+        + ''.join(rows) +
+        '</div>'
+        '<p class="pv-tap">' + t('web.pv.tap') + '</p>'
+        '</aside>')
 
 
 def _merge_panel():
     return (
         '<div class="panel on" id="panel-merge">'
         '<p class="lead">' + t('web.merge.lead') + '</p>'
-        '<form action="/api/merge">'
+        '<form action="/api/merge"><div class="panel-body"><div class="main-col">'
         '<div class="grid">'
         + _file_field(t('web.side.a'), 'a_file', 'a_path', '/path/to/english.epub')
         + _file_field(t('web.side.b'), 'b_file', 'b_path', '/path/to/other-language.epub')
@@ -470,14 +607,15 @@ def _merge_panel():
         '<input type="text" name="title" placeholder="' + t('web.title.ph') + '"></div>'
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.merge') + '</button>'
-        '</form><div class="result"></div></div>')
+        '</div>' + _merge_preview() + '</div></form>'
+        '<div class="result"></div></div>')
 
 
 def _split_panel():
     return (
         '<div class="panel" id="panel-split">'
         '<p class="lead">' + t('web.split.lead') + '</p>'
-        '<form action="/api/split">'
+        '<form action="/api/split"><div class="panel-body"><div class="main-col">'
         + _file_field(t('web.src'), 'in_file', 'in_path',
                       '/path/to/bilingual.epub', t('web.drop.bi'))
         + '<div class="field"><label>' + t('web.langs') + '</label>'
@@ -485,14 +623,15 @@ def _split_panel():
         '<span class="hint">' + t('web.langs.hint') + '</span></div>'
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.split') + '</button>'
-        '</form><div class="result"></div></div>')
+        '</div>' + _split_preview() + '</div></form>'
+        '<div class="result"></div></div>')
 
 
 def _remerge_panel():
     return (
         '<div class="panel" id="panel-remerge">'
         '<p class="lead">' + t('web.remerge.lead') + '</p>'
-        '<form action="/api/remerge">'
+        '<form action="/api/remerge"><div class="panel-body"><div class="main-col">'
         + _file_field(t('web.src.bi'), 'in_file', 'in_path',
                       '/path/to/bilingual.epub', t('web.drop.bi'))
         + '<div class="grid">'
@@ -506,7 +645,8 @@ def _remerge_panel():
         + _blur_controls() +
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.remerge') + '</button>'
-        '</form><div class="result"></div></div>')
+        '</div>' + _remerge_preview() + '</div></form>'
+        '<div class="result"></div></div>')
 
 
 PAGE = (
