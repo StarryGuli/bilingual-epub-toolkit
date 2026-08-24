@@ -4,6 +4,7 @@
 </p>
 
 <p align="center">
+  <a href="https://epub.starry-files.duckdns.org"><b>在线试用</b></a> ·
   <a href="./README.md">English</a> ·
   <a href="#安装">安装</a> ·
   <a href="#一条命令先试试">先试试</a> ·
@@ -15,6 +16,15 @@
 点一下才显示。
 
 任意标准 EPUB 都能处理，任意语言对。全程在本机运行，文件不上传到任何地方。
+
+## 什么都不用装，直接试
+
+**[epub.starry-files.duckdns.org](https://epub.starry-files.duckdns.org)**
+跑的就是这套代码。把两本 EPUB 拖进去，合并好的书就出来了。
+
+那是一台很小的个人服务器，当 demo 用就好：单文件上限 25 MB，按来源地址限流，
+上传的和生成的东西 30 分钟后自动删除，别人也下载不到你做的书。真要干活，
+或者书本身你就不想传到别人机器上，那就装到本地跑——这份文档剩下的部分讲的就是这个。
 
 ## 一条命令先试试
 

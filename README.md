@@ -4,6 +4,7 @@
 </p>
 
 <p align="center">
+  <a href="https://epub.starry-files.duckdns.org"><b>Try it online</b></a> ·
   <a href="./README.zh-CN.md">中文说明</a> ·
   <a href="#install">Install</a> ·
   <a href="#try-it-in-one-command">Try it</a> ·
@@ -17,6 +18,17 @@ followed by its translation, blurred, until you tap it.
 
 It works on any standard EPUB, in any language pair. Nothing is uploaded
 anywhere; everything runs on your machine.
+
+## Try it without installing anything
+
+**[epub.starry-files.duckdns.org](https://epub.starry-files.duckdns.org)** runs
+this same code. Drag two EPUBs in and it hands back the merged book.
+
+It is a small personal server, so treat it as a demo: uploads are capped at
+25 MB, jobs are rate limited per address, and everything you upload or produce
+is deleted automatically after 30 minutes. Nobody else can download what you
+made. For real work, or for anything you would rather not upload at all,
+install it and run it locally — that is what the rest of this page is about.
 
 ## Try it in one command
 
