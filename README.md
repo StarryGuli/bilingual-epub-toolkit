@@ -65,8 +65,14 @@ bilingual-epub merge \
   --blur-side b --blur 0.25em
 ```
 
-`--blur-side` takes `a`, `b`, or `none`. `--blur` is any CSS length; `em` is
-worth preferring because it scales with the reader's font size. Title and
+Hiding a side is optional. For plain facing text with nothing blurred:
+
+```bash
+bilingual-epub merge --a english.epub --b french.epub --out plain.epub --no-blur
+```
+
+Otherwise `--blur-side` takes `a` or `b`, and `--blur` is any CSS length; `em`
+is worth preferring because it scales with the reader's font size. Title and
 author default to a combination of both sources; `--title` and `--author`
 override.
 

@@ -99,6 +99,7 @@ def main(argv=None):
     pm.add_argument('--blur', default='0.25em', help=t('cli.blur'))
     pm.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b',
                     help=t('cli.blur_side'))
+    pm.add_argument('--no-blur', action='store_true', help=t('cli.no_blur'))
     pm.add_argument('--convert-side', choices=['a', 'b'], default=None,
                     help=t('cli.convert_side'))
     pm.add_argument('--convert', default='none', help=t('cli.convert'))
@@ -123,6 +124,7 @@ def main(argv=None):
     pr.add_argument('--blur', default='0.25em', help=t('cli.blur'))
     pr.add_argument('--blur-side', choices=['a', 'b', 'none'], default='b',
                     help=t('cli.blur_side'))
+    pr.add_argument('--no-blur', action='store_true', help=t('cli.no_blur'))
     pr.add_argument('--convert-side', choices=['a', 'b'], default=None,
                     help=t('cli.convert_side'))
     pr.add_argument('--convert', default='none', help=t('cli.convert'))
@@ -133,6 +135,9 @@ def main(argv=None):
     pr.set_defaults(func=cmd_remerge)
 
     args = p.parse_args(argv)
+    # --no-blur is the plain-language spelling of --blur-side none
+    if getattr(args, 'no_blur', False):
+        args.blur_side = 'none'
     args.func(args)
 
 

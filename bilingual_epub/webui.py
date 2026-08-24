@@ -23,6 +23,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from . import merge as merge_mod
+from . import samples
 from . import split as split_mod
 from .i18n import get_lang, set_lang, t
 
@@ -118,16 +119,33 @@ header { margin-bottom: 1.75rem; }
 }
 .tagline { margin: 0; max-width: 62ch; color: var(--ink-soft); font-size: .95rem; }
 
-.local-note {
-  display: inline-flex; align-items: center; gap: .4rem;
-  margin-top: .9rem; padding: .35rem .7rem;
-  background: var(--accent-soft); color: var(--accent);
-  border-radius: 999px; font-size: .8rem; font-weight: 500;
+.host { font-variant-numeric: tabular-nums; opacity: .75; }
+
+/* ---- on/off switch ----------------------------------------------------- */
+.switch-row { margin-bottom: 1rem; }
+.switch { display: flex; align-items: flex-start; gap: .65rem;
+          margin: 0; cursor: pointer; font-weight: 400; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .track {
+  flex: none; margin-top: .12rem; width: 38px; height: 22px; border-radius: 999px;
+  background: var(--line); position: relative;
+  transition: background .18s ease;
 }
-.local-note .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; flex: none;
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: transform .18s ease;
 }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track .knob { transform: translateX(16px); }
+.switch input:focus-visible + .track { box-shadow: 0 0 0 3px var(--accent-soft); }
+.switch-text b { display: block; font-size: .88rem; font-weight: 600; }
+.switch-text .hint { margin-top: .1rem; }
+
+/* collapsed when tap-to-reveal is off */
+.blur-opts { transition: opacity .18s ease; }
+.blur-opts[hidden] { display: none; }
 
 /* ---- tabs -------------------------------------------------------------- */
 .tabs { display: flex; gap: .25rem; position: relative; margin: 1.75rem 0 0;
@@ -232,6 +250,14 @@ select { appearance: none; cursor: pointer;
   background: var(--accent-soft); color: var(--accent);
   font-size: .66rem; letter-spacing: .04em;
 }
+.book-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.book-dl {
+  flex: none; padding: .1rem .45rem; border-radius: 5px;
+  background: var(--ok-soft); color: var(--ok);
+  text-decoration: none; font-size: .68rem; font-weight: 600;
+  transition: filter .16s ease;
+}
+.book-dl:hover { filter: brightness(.94); }
 .book p { margin: .3rem 0; font-size: .8rem; line-height: 1.55; }
 .book.out { border-color: var(--accent); }
 .book.out p { font-size: .84rem; }
@@ -248,8 +274,10 @@ select { appearance: none; cursor: pointer;
 
 .preview .a { color: var(--ink); }
 .preview .b { color: var(--ink); transition: filter .22s ease; }
-.preview.blur-b .b { filter: blur(var(--blur, .25em)); }
-.preview.blur-a .a { filter: blur(var(--blur, .25em)); }
+.preview.blur-b .b, .preview.blur-a .a { filter: blur(var(--blur, .25em)); }
+/* the blurred side is clickable here for the same reason it is in the book */
+.preview.blur-b .b, .preview.blur-a .a { cursor: pointer; }
+.preview .revealed { filter: none !important; }
 .pv-tap { margin-top: .6rem; color: var(--ink-soft); font-size: .74rem; text-align: center; }
 
 /* ---- button ------------------------------------------------------------ */
@@ -392,20 +420,39 @@ $$('.drop').forEach(wireDrop);
 /* ---- live blur preview ---- */
 function wirePreview(form) {
   const prev = $('.preview', form);
-  if (!prev) return;
   const amount = $('input[name=blur]', form);
   const side = $('select[name=blur_side]', form);
+  const on = $('input[name=tap_reveal]', form);
+  const opts = $('.blur-opts', form);
+  if (!amount || !side) return;
+
   const sync = () => {
-    const v = (amount.value || '').trim() || '0.25em';
-    prev.style.setProperty('--blur', v);
-    prev.classList.toggle('blur-b', side.value === 'b');
-    prev.classList.toggle('blur-a', side.value === 'a');
+    const enabled = !on || on.checked;
+    if (opts) opts.hidden = !enabled;
+    if (!prev) return;
+    prev.style.setProperty('--blur', (amount.value || '').trim() || '0.25em');
+    prev.classList.toggle('blur-b', enabled && side.value === 'b');
+    prev.classList.toggle('blur-a', enabled && side.value === 'a');
+    if (!enabled) $$('.revealed', prev).forEach(el => el.classList.remove('revealed'));
   };
   amount.addEventListener('input', sync);
   side.addEventListener('change', sync);
+  if (on) on.addEventListener('change', sync);
   sync();
 }
 $$('form').forEach(wirePreview);
+
+/* Click a blurred line to reveal it, the way the generated book works.
+   Clicking the blurred side of the preview is the whole point of the effect,
+   so the preview has to actually do it and not just look like it would. */
+$$('.preview').forEach(pv => pv.addEventListener('click', e => {
+  const line = e.target.closest('p.a, p.b');
+  if (!line || !pv.contains(line)) return;
+  const hidden = (pv.classList.contains('blur-b') && line.classList.contains('b')) ||
+                 (pv.classList.contains('blur-a') && line.classList.contains('a'));
+  if (!hidden && !line.classList.contains('revealed')) return;
+  line.classList.toggle('revealed');
+}));
 
 /* ---- submit ---- */
 function statsTable(rows) {
@@ -453,6 +500,34 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
 }));
 """
 
+def build_demo(workdir):
+    """Produce the books the preview offers for download.
+
+    The preview used to be typographic mock-up: it showed what the output looks
+    like but you could not open it. These are the real thing, built by the same
+    code path the buttons on this page use, so every card in the preview is a
+    file you can download and read.
+    """
+    demo_dir = os.path.join(workdir, 'demo')
+    os.makedirs(demo_dir)
+    quiet, sys.stdout = sys.stdout, io.StringIO()
+    try:
+        src = samples.build_samples(demo_dir)
+        merged = os.path.join(demo_dir, 'bilingual.epub')
+        merge_mod.merge_bilingual(a_epub=src['en'], b_epub=src['fr'], out_path=merged)
+        parts = split_mod.split_by_lang(merged, os.path.join(demo_dir, 'split'))
+        remerged = os.path.join(demo_dir, 'remerged.epub')
+        merge_mod.merge_bilingual(a_epub=parts['en'], b_epub=parts['fr'],
+                                  out_path=remerged, blur_side='a', blur='0.4em')
+    finally:
+        sys.stdout = quiet
+    offered = {'demo-en': src['en'], 'demo-fr': src['fr'],
+               'demo-bi': merged, 'demo-remerged': remerged}
+    for lang, path in parts.items():
+        offered['demo-split-' + lang] = path
+    return offered
+
+
 def _drop(name, main, sub):
     return (
         '<div class="drop">'
@@ -481,10 +556,13 @@ PV_FR = ['Vellmark comptait quatre cents r\u00e9verb\u00e8res, et Ida les alluma
          'Personne ne lui avait demand\u00e9 de prendre ce travail.']
 
 
-def _book(name, tag, paras, cls='', para_cls=''):
+def _book(name, tag, paras, cls='', para_cls='', dl=None):
     body = ''.join('<p class="%s">%s</p>' % (para_cls, p) for p in paras)
+    link = ('<a class="book-dl" href="/download?id=' + dl + '" download>'
+            + t('web.pv.download') + '</a>') if dl else ''
     return ('<div class="book ' + cls + '"><div class="book-h">'
-            '<span class="tag">' + tag + '</span>' + name + '</div>' + body + '</div>')
+            '<span class="tag">' + tag + '</span><span class="book-n">' + name
+            + '</span>' + link + '</div>' + body + '</div>')
 
 
 def _flow(op):
@@ -492,13 +570,26 @@ def _flow(op):
 
 
 def _blur_controls():
+    """Whether to hide a side at all is its own switch.
+
+    It used to be the third entry in a select called "which side to blur",
+    so someone who simply wanted plain facing text had to go looking for it
+    inside a question that presumes the answer.
+    """
     return (
-        '<div class="grid">'
+        '<input type="hidden" name="has_switch" value="1">'
+        '<div class="field switch-row">'
+        '<label class="switch">'
+        '<input type="checkbox" name="tap_reveal" value="1" checked>'
+        '<span class="track"><span class="knob"></span></span>'
+        '<span class="switch-text"><b>' + t('web.tap.enable') + '</b>'
+        '<span class="hint">' + t('web.tap.help') + '</span></span>'
+        '</label></div>'
+        '<div class="grid blur-opts">'
         '<div class="field"><label>' + t('web.blur.which') + '</label>'
         '<select name="blur_side">'
         '<option value="b" selected>' + t('web.blur.b') + '</option>'
         '<option value="a">' + t('web.blur.a') + '</option>'
-        '<option value="none">' + t('web.blur.none') + '</option>'
         '</select></div>'
         '<div class="field"><label>' + t('web.blur.amount') + '</label>'
         '<input type="text" name="blur" value="0.25em">'
@@ -516,15 +607,18 @@ def _merge_preview():
     return (
         '<aside class="side">'
         '<div class="cap">' + t('web.pv.sources') + '</div>'
-        '<p class="pv-note">' + t('web.pv.live') + '</p>'
+        '<p class="pv-note">' + t('web.pv.real') + '</p>'
         '<div class="pv-pair">'
-        + _book('sample-en.epub', 'EN', PV_EN)
-        + _book('sample-fr.epub', 'FR', PV_FR)
+        + _book('sample-en.epub', 'EN', PV_EN, dl='demo-en')
+        + _book('sample-fr.epub', 'FR', PV_FR, dl='demo-fr')
         + '</div>'
         + _flow(t('web.pv.merge')) +
         '<div class="cap">' + t('web.pv.result') + '</div>'
         '<div class="book out preview blur-b" style="margin-top:.5rem">'
-        '<div class="book-h"><span class="tag">EN + FR</span>bilingual.epub</div>'
+        '<div class="book-h"><span class="tag">EN + FR</span>'
+        '<span class="book-n">bilingual.epub</span>'
+        '<a class="book-dl" href="/download?id=demo-bi" download>'
+        + t('web.pv.download') + '</a></div>'
         + ''.join(interleaved) +
         '</div>'
         '<p class="pv-tap">' + t('web.pv.tap') + '</p>'
@@ -540,16 +634,18 @@ def _split_preview():
     return (
         '<aside class="side">'
         '<div class="cap">' + t('web.pv.sources') + '</div>'
-        '<p class="pv-note">' + t('web.pv.static') + '</p>'
+        '<p class="pv-note">' + t('web.pv.real') + '</p>'
         '<div class="book"><div class="book-h">'
-        '<span class="tag">EN + FR</span>bilingual.epub</div>'
+        '<span class="tag">EN + FR</span><span class="book-n">bilingual.epub</span>'
+        '<a class="book-dl" href="/download?id=demo-bi" download>'
+        + t('web.pv.download') + '</a></div>'
         + ''.join(mixed) +
         '</div>'
         + _flow(t('web.pv.split')) +
         '<div class="cap">' + t('web.pv.result') + '</div>'
         '<div class="pv-pair" style="margin-top:.5rem">'
-        + _book('bilingual.en.epub', 'EN', PV_EN, cls='out')
-        + _book('bilingual.fr.epub', 'FR', PV_FR, cls='out')
+        + _book('bilingual.en.epub', 'EN', PV_EN, cls='out', dl='demo-split-en')
+        + _book('bilingual.fr.epub', 'FR', PV_FR, cls='out', dl='demo-split-fr')
         + '</div>'
         '</aside>')
 
@@ -567,15 +663,20 @@ def _remerge_preview():
     return (
         '<aside class="side">'
         '<div class="cap">' + t('web.pv.sources') + '</div>'
-        '<p class="pv-note">' + t('web.pv.live') + '</p>'
+        '<p class="pv-note">' + t('web.pv.real') + '</p>'
         '<div class="book"><div class="book-h">'
-        '<span class="tag">EN + FR</span>bilingual.epub</div>'
+        '<span class="tag">EN + FR</span><span class="book-n">bilingual.epub</span>'
+        '<a class="book-dl" href="/download?id=demo-bi" download>'
+        + t('web.pv.download') + '</a></div>'
         + ''.join(plain) +
         '</div>'
         + _flow(t('web.pv.remerge')) +
         '<div class="cap">' + t('web.pv.result') + '</div>'
         '<div class="book out preview blur-b" style="margin-top:.5rem">'
-        '<div class="book-h"><span class="tag">EN + FR</span>remerged.epub</div>'
+        '<div class="book-h"><span class="tag">EN + FR</span>'
+        '<span class="book-n">remerged.epub</span>'
+        '<a class="book-dl" href="/download?id=demo-remerged" download>'
+        + t('web.pv.download') + '</a></div>'
         + ''.join(rows) +
         '</div>'
         '<p class="pv-tap">' + t('web.pv.tap') + '</p>'
@@ -662,7 +763,6 @@ PAGE = (
     '<a class="lang-switch" href="?lang=__OTHERLANG__">__SWITCH__</a>'
     '</div>'
     '<p class="tagline">__TAGLINE__</p>'
-    '<span class="local-note"><span class="dot"></span>__LOCAL__</span>'
     '</header>'
     '<div class="tabs" role="tablist">'
     '<button class="tab" data-tab="merge" role="tab" aria-selected="true">__T_MERGE__</button>'
@@ -670,7 +770,7 @@ PAGE = (
     '<button class="tab" data-tab="remerge" role="tab" aria-selected="false">__T_REMERGE__</button>'
     '</div>'
     '__MERGE__' '__SPLIT__' '__REMERGE__'
-    '<footer>__FOOTER__</footer>'
+    '<footer>__FOOTER__ <span class="host">__LOCAL__</span></footer>'
     '</div><script>const L=__LABELS__;</script><script>__JS__</script></body></html>')
 
 
@@ -689,11 +789,11 @@ def render_page():
             .replace('__OTHERLANG__', 'en' if lang == 'zh' else 'zh')
             .replace('__SWITCH__', t('web.switch'))
             .replace('__TAGLINE__', t('app.tagline'))
-            .replace('__LOCAL__', t('app.local_only'))
             .replace('__T_MERGE__', t('web.tab.merge'))
             .replace('__T_SPLIT__', t('web.tab.split'))
             .replace('__T_REMERGE__', t('web.tab.remerge'))
             .replace('__FOOTER__', t('web.footer'))
+            .replace('__LOCAL__', t('app.local_only'))
             .replace('__MERGE__', _merge_panel())
             .replace('__SPLIT__', _split_panel())
             .replace('__REMERGE__', _remerge_panel())
@@ -741,6 +841,18 @@ def parse_multipart(body, boundary):
         else:
             fields[name] = data.decode('utf-8', 'replace')
     return fields, files
+
+
+def _blur_side(fields):
+    """An unchecked tap-to-reveal switch wins over whichever side is selected.
+
+    Browsers omit unchecked checkboxes entirely, so its absence is the signal --
+    but only for requests that actually carry the switch, which is why the
+    marker field is checked first. That keeps a bare API call working.
+    """
+    if fields.get('has_switch') or 'tap_reveal' in fields:
+        return fields.get('blur_side', 'b') if fields.get('tap_reveal') else 'none'
+    return fields.get('blur_side', 'b')
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -859,7 +971,7 @@ class Handler(BaseHTTPRequestHandler):
         out, stats = merge_mod.merge_bilingual(
             a_epub=a, b_epub=b, out_path=out,
             blur=(fields.get('blur') or '0.25em').strip() or '0.25em',
-            blur_side=fields.get('blur_side', 'b'),
+            blur_side=_blur_side(fields),
             convert_side=(fields.get('convert_side') or '').strip() or None,
             cc_config=(fields.get('convert') or 'none').strip() or 'none',
             title=(fields.get('title') or '').strip() or None)
@@ -888,7 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
             out, stats = merge_mod.merge_bilingual(
                 a_epub=parts[a_lang], b_epub=parts[b_lang], out_path=out,
                 blur=(fields.get('blur') or '0.25em').strip() or '0.25em',
-                blur_side=fields.get('blur_side', 'b'))
+                blur_side=_blur_side(fields))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         return {'title': t('web.ok.remerge'),
@@ -931,7 +1043,7 @@ def main():
     srv.outputs = os.path.join(workdir, 'outputs')
     os.makedirs(srv.uploads)
     os.makedirs(srv.outputs)
-    srv.offered = {}
+    srv.offered = build_demo(workdir)
 
     url = 'http://%s:%d' % (HOST, port)
     print('\n  \U0001F4D6  %s' % t('app.name'))

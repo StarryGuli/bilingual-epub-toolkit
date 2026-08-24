@@ -27,8 +27,7 @@ STRINGS = {
     'app.any_epub':      ('Works with any standard EPUB. DRM-protected files '
                           'cannot be read.',
                           '任意标准 EPUB 都能处理，DRM 加密的除外。'),
-    'app.local_only':    ('Runs entirely on this machine -- files never leave it.',
-                          '只在本机运行，文件不出这台电脑。'),
+    'app.local_only':    ('Serving on 127.0.0.1', '监听 127.0.0.1'),
 
     # ---- prompts / validation -------------------------------------------
     'ui.cancelled':      ('Cancelled.', '已取消。'),
@@ -106,9 +105,13 @@ STRINGS = {
     'remerge.pick_b':    ('Which language is the B side?', '哪个语言当 B 侧？'),
 
     # ---- blur options ----------------------------------------------------
-    'blur.which':        ('Which side gets blurred? (the blurred side is the one '
+    'blur.enable':       ('Hide one side until it is tapped?',
+                          '要不要「点一下才显示」的效果？'),
+    'blur.enable.help':  ('Off gives plain facing text with nothing hidden.',
+                          '关掉就是纯对照排版，什么都不糊。'),
+    'blur.which':        ('Which side gets hidden? (the hidden side is the one '
                           'you tap to reveal)',
-                          '模糊哪一侧？（默认模糊的那侧就是"点一下才显示"的译文）'),
+                          '糊住哪一侧？（糊住的那侧就是"点一下才显示"的）'),
     'blur.b':            ('B side', 'B 侧'),
     'blur.b.help':       ('B is hidden until tapped -- the usual choice: A original, '
                           'B translation',
@@ -154,8 +157,11 @@ STRINGS = {
                           '已有双语 EPUB → 拆开重新合并成新双语 EPUB（换参数/换风格用）'),
     'cli.blur':          ('blur amount as a CSS length; em is recommended. Default 0.25em',
                           '模糊程度（CSS 长度，建议用 em），默认 0.25em'),
-    'cli.blur_side':     ('which side to blur. Default b; none = no blur',
-                          '模糊哪一侧，默认 b；none=不模糊'),
+    'cli.blur_side':     ('which side to hide. Default b; none = nothing hidden',
+                          '糊住哪一侧，默认 b；none=都不糊'),
+    'cli.no_blur':       ('plain facing text, nothing hidden -- the same as '
+                          '--blur-side none',
+                          '纯对照排版，什么都不糊 —— 等同 --blur-side none'),
     'cli.workdir':       ('scratch directory; defaults to a temp dir, cleaned up after',
                           '中间文件目录，默认用系统临时目录，用完自动清理'),
     'cli.toggle_label':  ('text for the show/hide-all button inside the book',
@@ -228,7 +234,12 @@ STRINGS = {
     'web.drop.or_path':  ('or give a path on this machine', '或填本机路径'),
     'web.uploaded':      ('will be uploaded to the local server', '会上传到本机服务器'),
     'web.clear':         ('Clear the selected file', '清除所选文件'),
-    'web.blur.which':    ('Blur which side', '模糊哪一侧'),
+    'web.tap.enable':    ('Tap to reveal', '点按显示'),
+    'web.tap.help':      ('Blur one side until the reader taps it. Turn this off '
+                          'for plain facing text with nothing hidden.',
+                          '把一侧糊住，读者点一下才显示。不需要就关掉，'
+                          '出来是纯对照排版。'),
+    'web.blur.which':    ('Hide which side', '糊住哪一侧'),
     'web.blur.b':        ('B side (translation)', 'B 侧（译文）'),
     'web.blur.a':        ('A side (original)', 'A 侧（原文）'),
     'web.blur.none':     ('Neither', '都不模糊'),
@@ -291,8 +302,14 @@ STRINGS = {
     'web.pv.merge':      ('merge', '合并'),
     'web.pv.split':      ('split', '拆分'),
     'web.pv.remerge':    ('remerge', '重新合并'),
-    'web.pv.tap':        ('tap a blurred line to reveal it',
-                          '点糊住的那行就会显示'),
+    'web.pv.tap':        ('click a blurred line to reveal it — the finished book '
+                          'behaves the same way',
+                          '点一下糊住的那行就会显示 —— 做出来的书就是这个行为'),
+    'web.pv.download':   ('download', '下载'),
+    'web.pv.real':       ('These are real files, built by the same code the buttons '
+                          'below use. Download any of them and open it in a reader.',
+                          '这三个是真文件，跟下面按钮走的是同一套代码。'
+                          '点下载就能拿到，直接扔进阅读器就能看。'),
     'web.pv.live':       ('This is the sample pair in examples/ -- the blur below '
                           'follows the settings on the left.',
                           '这就是 examples/ 里那两本示例书；下面的模糊程度跟着左边的'

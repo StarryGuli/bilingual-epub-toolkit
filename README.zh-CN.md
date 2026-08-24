@@ -62,7 +62,13 @@ bilingual-epub merge \
   --blur-side b --blur 0.25em
 ```
 
-`--blur-side` 可以填 `a`、`b` 或 `none`。`--blur` 接受任意 CSS 长度，建议用 `em`，
+**糊不糊是可选的。** 不想要点按效果、就想要纯对照排版：
+
+```bash
+bilingual-epub merge --a english.epub --b french.epub --out plain.epub --no-blur
+```
+
+要的话，`--blur-side` 填 `a` 或 `b`，`--blur` 接受任意 CSS 长度，建议用 `em`，
 因为它会跟随读者的字号缩放。书名和作者默认拼接两侧原书的元数据，用 `--title` /
 `--author` 覆盖。
 

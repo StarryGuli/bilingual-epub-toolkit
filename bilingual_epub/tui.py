@@ -121,15 +121,16 @@ def print_stats(stats):
 
 
 def ask_blur_opts():
+    # Whether to hide a side at all comes first: plenty of people just want
+    # facing text, and that should not be buried inside "which side".
+    print('\n' + dim(t('blur.enable.help')))
+    if not confirm(t('blur.enable'), default=True):
+        return 'none', '0.25em'
     blur_side = choose(t('blur.which'), [
         ('b', t('blur.b'), t('blur.b.help')),
         ('a', t('blur.a'), t('blur.a.help')),
-        ('none', t('blur.none'), t('blur.none.help')),
     ], default_idx=0)
-    blur = '0.25em'
-    if blur_side != 'none':
-        blur = ask(t('blur.amount'), default='0.25em')
-    return blur_side, blur
+    return blur_side, ask(t('blur.amount'), default='0.25em')
 
 
 def ask_convert_opts():

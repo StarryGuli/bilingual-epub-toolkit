@@ -89,6 +89,20 @@ def test_blur_can_be_disabled(en_epub, fr_epub, tmp_path):
     assert 'noblur' in html
 
 
+def test_no_blur_output_hides_nothing(en_epub, fr_epub, tmp_path):
+    """Plain facing text: no blurred class, no reveal-all toolbar, but both
+    languages still tagged so the book can still be split."""
+    out = str(tmp_path / 'plain.epub')
+    merge_bilingual(en_epub, fr_epub, out, blur_side='none')
+    html = read_chapter(out)
+    assert 'blurred' not in html
+    assert 'toggle-all' not in html, 'no toolbar when there is nothing to toggle'
+    assert 'lang="en"' in html and 'lang="fr"' in html
+    # and it must still round-trip
+    results = split_by_lang(out, str(tmp_path / 'parts'))
+    assert set(results) == {'en', 'fr'}
+
+
 def test_custom_blur_amount_reaches_the_stylesheet(en_epub, fr_epub, tmp_path):
     out = str(tmp_path / 'bi.epub')
     merge_bilingual(en_epub, fr_epub, out, blur='0.9em')
@@ -237,3 +251,29 @@ def test_non_epub_input_gives_a_readable_error(fr_epub, tmp_path):
     with pytest.raises(SystemExit) as exc:
         merge_bilingual(str(junk), fr_epub, str(tmp_path / 'x.epub'))
     assert 'EPUB' in str(exc.value)
+
+
+# --------------------------------------------------------------------------- #
+# shipped sample books
+# --------------------------------------------------------------------------- #
+
+def test_sample_books_build_and_merge_cleanly(tmp_path):
+    """The web UI offers these as real downloads, so they have to build
+    anywhere the package is installed -- not just from a source checkout."""
+    from bilingual_epub.samples import PREVIEW_EN, PREVIEW_FR, build_samples
+
+    books = build_samples(str(tmp_path / 'samples'))
+    assert set(books) == {'en', 'fr'}
+    for path in books.values():
+        with zipfile.ZipFile(path) as zf:
+            assert zf.read('mimetype') == b'application/epub+zip'
+
+    out = str(tmp_path / 'demo.epub')
+    _out, stats = merge_bilingual(books['en'], books['fr'], out)
+    assert sum(row[3] for row in stats) == 17, 'the sample pair aligns 1:1 throughout'
+    assert sum(row[4] + row[5] + row[6] for row in stats) == 0
+
+    # the preview text on the web page must be text that is really in the books
+    body = read_chapter(out)
+    assert PREVIEW_EN[0] in body
+    assert PREVIEW_FR[0] in body
