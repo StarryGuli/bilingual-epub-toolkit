@@ -15,16 +15,15 @@ import io
 import json
 import os
 import re
-import secrets
 import shutil
 import sys
 import tempfile
 import traceback
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import guard, samples
 from . import merge as merge_mod
-from . import samples
 from . import split as split_mod
 from .i18n import get_lang, set_lang, t
 
@@ -501,6 +500,27 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
 }));
 """
 
+class Config:
+    """How this server is exposed.
+
+    Local mode is the default and behaves as it always has: bound to loopback,
+    one trusted user, a path field that can open anything that user could open
+    anyway. Public mode is for putting it on a host other people can reach, and
+    tightens every one of those assumptions.
+    """
+
+    def __init__(self, public=False, max_upload=None, ttl=1800.0):
+        self.public = public
+        # a public host processes strangers' files on someone else's disk, so
+        # the ceiling is much lower than what a local user should be allowed
+        self.max_upload = max_upload or (25 * 1024 * 1024 if public
+                                         else 200 * 1024 * 1024)
+        self.ttl = ttl
+        # reading an arbitrary server path is the whole point locally and an
+        # arbitrary-file-read hole in public
+        self.allow_paths = not public
+
+
 def build_demo(workdir):
     """Produce the books the preview offers for download.
 
@@ -540,13 +560,17 @@ def _drop(name, main, sub):
         '</div>')
 
 
-def _file_field(label, file_name, path_name, placeholder, drop_label=None):
+def _file_field(label, file_name, path_name, placeholder, drop_label=None,
+                cfg=None):
+    tail = ''
+    if cfg is None or cfg.allow_paths:
+        tail = ('<div class="or">' + t('web.drop.or_path') + '</div>'
+                '<input type="text" name="' + path_name + '" placeholder="'
+                + placeholder + '">')
     return (
         '<div class="field"><label>' + label + '</label>'
         + _drop(file_name, drop_label or t('web.drop'), t('web.drop.sub'))
-        + '<div class="or">' + t('web.drop.or_path') + '</div>'
-        '<input type="text" name="' + path_name + '" placeholder="' + placeholder + '">'
-        '</div>')
+        + tail + '</div>')
 
 
 # Real lines from the sample books in examples/, so the preview shows exactly
@@ -684,14 +708,16 @@ def _remerge_preview():
         '</aside>')
 
 
-def _merge_panel():
+def _merge_panel(cfg, page_token):
     return (
         '<div class="panel on" id="panel-merge">'
         '<p class="lead">' + t('web.merge.lead') + '</p>'
-        '<form action="/api/merge"><div class="panel-body"><div class="main-col">'
+        '<form action="/api/merge">'
+        '<input type="hidden" name="page_token" value="' + page_token + '">'
+        '<div class="panel-body"><div class="main-col">'
         '<div class="grid">'
-        + _file_field(t('web.side.a'), 'a_file', 'a_path', '/path/to/english.epub')
-        + _file_field(t('web.side.b'), 'b_file', 'b_path', '/path/to/other-language.epub')
+        + _file_field(t('web.side.a'), 'a_file', 'a_path', '/path/to/english.epub', cfg=cfg)
+        + _file_field(t('web.side.b'), 'b_file', 'b_path', '/path/to/other-language.epub', cfg=cfg)
         + '</div>'
         + _blur_controls() +
         '<div class="grid">'
@@ -713,13 +739,15 @@ def _merge_panel():
         '<div class="result"></div></div>')
 
 
-def _split_panel():
+def _split_panel(cfg, page_token):
     return (
         '<div class="panel" id="panel-split">'
         '<p class="lead">' + t('web.split.lead') + '</p>'
-        '<form action="/api/split"><div class="panel-body"><div class="main-col">'
+        '<form action="/api/split">'
+        '<input type="hidden" name="page_token" value="' + page_token + '">'
+        '<div class="panel-body"><div class="main-col">'
         + _file_field(t('web.src'), 'in_file', 'in_path',
-                      '/path/to/bilingual.epub', t('web.drop.bi'))
+                      '/path/to/bilingual.epub', t('web.drop.bi'), cfg=cfg)
         + '<div class="field"><label>' + t('web.langs') + '</label>'
         '<input type="text" name="langs" placeholder="en,fr">'
         '<span class="hint">' + t('web.langs.hint') + '</span></div>'
@@ -729,13 +757,15 @@ def _split_panel():
         '<div class="result"></div></div>')
 
 
-def _remerge_panel():
+def _remerge_panel(cfg, page_token):
     return (
         '<div class="panel" id="panel-remerge">'
         '<p class="lead">' + t('web.remerge.lead') + '</p>'
-        '<form action="/api/remerge"><div class="panel-body"><div class="main-col">'
+        '<form action="/api/remerge">'
+        '<input type="hidden" name="page_token" value="' + page_token + '">'
+        '<div class="panel-body"><div class="main-col">'
         + _file_field(t('web.src.bi'), 'in_file', 'in_path',
-                      '/path/to/bilingual.epub', t('web.drop.bi'))
+                      '/path/to/bilingual.epub', t('web.drop.bi'), cfg=cfg)
         + '<div class="grid">'
         '<div class="field"><label>' + t('web.alang') + '</label>'
         '<input type="text" name="a_lang" placeholder="en">'
@@ -775,8 +805,9 @@ PAGE = (
     '</div><script>const L=__LABELS__;</script><script>__JS__</script></body></html>')
 
 
-def render_page():
+def render_page(cfg=None, page_token=''):
     """Render the whole page in the currently selected language."""
+    cfg = cfg or Config()
     lang = get_lang()
     labels = json.dumps({
         'chapter': t('web.res.chapter'), 'a': t('web.res.a'), 'b': t('web.res.b'),
@@ -793,11 +824,12 @@ def render_page():
             .replace('__T_MERGE__', t('web.tab.merge'))
             .replace('__T_SPLIT__', t('web.tab.split'))
             .replace('__T_REMERGE__', t('web.tab.remerge'))
-            .replace('__FOOTER__', t('web.footer'))
+            .replace('__FOOTER__', t('web.footer') +
+                     (' ' + t('web.public_note') if cfg.public else ''))
             .replace('__LOCAL__', t('app.local_only'))
-            .replace('__MERGE__', _merge_panel())
-            .replace('__SPLIT__', _split_panel())
-            .replace('__REMERGE__', _remerge_panel())
+            .replace('__MERGE__', _merge_panel(cfg, page_token))
+            .replace('__SPLIT__', _split_panel(cfg, page_token))
+            .replace('__REMERGE__', _remerge_panel(cfg, page_token))
             .replace('__LABELS__', labels)
             .replace('__JS__', JS))
 
@@ -878,14 +910,17 @@ class Handler(BaseHTTPRequestHandler):
                    status=status, ctype='application/json; charset=utf-8')
 
     def _offer(self, path):
-        """Register a built file for download and return its handle.
+        """Register a built file against the requesting session.
 
-        The handle is random, not a counter. Sequential ids are harmless when
-        the only client is you on localhost, but they mean anyone who can
-        reach the server can walk the numbers and collect everybody's books.
+        The handle is random, not a counter: sequential ids are harmless when
+        the only client is you on localhost, but they let anyone who can reach
+        the server walk the numbers and collect everybody's books. Scoping to
+        the session is the other half -- guessing a handle is not enough, it
+        has to be your handle.
         """
-        token = secrets.token_urlsafe(18)
-        self.server.offered[token] = path
+        token = self.server.sessions.register(self._sid(), path)
+        if token is None:
+            raise SystemExit(t('web.quota'))
         return {'id': token, 'name': os.path.basename(path)}
 
     def _source(self, fields, files, file_key, path_key, label):
@@ -895,22 +930,37 @@ class Handler(BaseHTTPRequestHandler):
             safe = os.path.basename(name) or 'upload.epub'
             # one directory per upload rather than a name prefix, so the
             # original filename survives into the split/merge output names
-            slot = tempfile.mkdtemp(dir=self.server.uploads)
+            sess = self.server.sessions.get(self._sid())
+            root = sess['dir'] if sess else self.server.uploads
+            slot = tempfile.mkdtemp(dir=root)
             dest = os.path.join(slot, safe)
             with open(dest, 'wb') as f:
                 f.write(blob)
             return dest
         typed = (fields.get(path_key) or '').strip()
         if typed:
+            if not self.server.cfg.allow_paths:
+                # on a public host this would read any file the server can
+                # reach, so it is refused outright rather than sanitised
+                raise SystemExit(t('web.no_paths'))
             if not os.path.exists(typed):
                 raise SystemExit(t('web.no_such', label, typed))
             return typed
         raise SystemExit(t('web.need_file', label))
 
     def _out_path(self, stem):
-        return os.path.join(self.server.outputs, stem)
+        sess = self.server.sessions.get(self._sid())
+        return os.path.join(sess['dir'] if sess else self.server.outputs, stem)
 
     # ---- GET ------------------------------------------------------------ #
+    def _sid(self):
+        raw = self.headers.get('Cookie', '')
+        for part in raw.split(';'):
+            name, _, value = part.strip().partition('=')
+            if name == 'bes':
+                return value
+        return ''
+
     def do_GET(self):
         p = urllib.parse.urlparse(self.path)
         if p.path == '/':
@@ -918,10 +968,21 @@ class Handler(BaseHTTPRequestHandler):
             want = urllib.parse.parse_qs(p.query).get('lang', [''])[0]
             if want in ('en', 'zh'):
                 set_lang(want)
-            self._send(render_page())
+            sess = self.server.sessions.get(self._sid())
+            headers = []
+            if sess is None:
+                sid = self.server.sessions.issue()
+                sess = self.server.sessions.get(sid)
+                headers.append(('Set-Cookie',
+                                'bes=%s; Path=/; HttpOnly; SameSite=Strict' % sid))
+            self._send(render_page(self.server.cfg, sess['page_token']),
+                       headers=headers)
         elif p.path == '/download':
             token = urllib.parse.parse_qs(p.query).get('id', [''])[0]
+            # demo books belong to everyone; anything else only to its session
             path = self.server.offered.get(token)
+            if path is None:
+                path = self.server.sessions.resolve(self._sid(), token)
             if not path or not os.path.exists(path):
                 self._send('not found', status=404, ctype='text/plain; charset=utf-8')
                 return
@@ -940,11 +1001,24 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'error': 'unknown endpoint'}, status=404)
             return
 
+        cfg = self.server.cfg
+        sess = self.server.sessions.get(self._sid())
+        if sess is None:
+            # every POST has to come from a page this server handed out
+            self._json({'ok': False, 'error': t('web.no_session')}, status=403)
+            return
+        ok, wait = self.server.limiter.check(self.client_address[0])
+        if not ok:
+            self._json({'ok': False, 'error': t('web.slow_down', int(wait) + 1)},
+                       status=429)
+            return
+
         ctype = self.headers.get('Content-Type', '')
         length = int(self.headers.get('Content-Length', 0) or 0)
-        if length > MAX_UPLOAD:
+        if length > cfg.max_upload:
             self._json({'ok': False,
-                        'error': t('web.too_big', MAX_UPLOAD // 1048576)}, status=413)
+                        'error': t('web.too_big', cfg.max_upload // 1048576)},
+                       status=413)
             return
         body = self.rfile.read(length) if length else b''
         if 'multipart/form-data' in ctype and 'boundary=' in ctype:
@@ -955,22 +1029,28 @@ class Handler(BaseHTTPRequestHandler):
                       urllib.parse.parse_qs(body.decode('utf-8', 'replace')).items()}
             files = {}
 
+        if fields.get('page_token') != sess['page_token']:
+            self._json({'ok': False, 'error': t('web.stale_page')}, status=403)
+            return
+
         buf = io.StringIO()
         real_stdout, sys.stdout = sys.stdout, buf
-        try:
-            payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
-            payload['log'] = buf.getvalue().strip()
-            payload['ok'] = True
-        except SystemExit as e:
-            # these carry a message written for a person to read
-            payload = {'ok': False, 'error': str(e)}
-        except Exception:
-            # an unexpected failure: log it here, but do not ship the traceback
-            # to the browser -- it carries absolute server paths and internals
-            traceback.print_exc(file=sys.stderr)
-            payload = {'ok': False, 'error': t('web.crashed')}
-        finally:
-            sys.stdout = real_stdout
+        # aligning a book is CPU-bound; a few in parallel will bury a small host
+        with self.server.slots:
+            try:
+                payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
+                payload['log'] = buf.getvalue().strip()
+                payload['ok'] = True
+            except SystemExit as e:
+                # these carry a message written for a person to read
+                payload = {'ok': False, 'error': str(e)}
+            except Exception:
+                # an unexpected failure: log it here, but do not ship the
+                # traceback to the browser -- it carries absolute server paths
+                traceback.print_exc(file=sys.stderr)
+                payload = {'ok': False, 'error': t('web.crashed')}
+            finally:
+                sys.stdout = real_stdout
         self._json(payload)
 
     # ---- the three operations ------------------------------------------- #
@@ -991,7 +1071,9 @@ class Handler(BaseHTTPRequestHandler):
     def _do_split(self, fields, files):
         src = self._source(fields, files, 'in_file', 'in_path', t('web.src'))
         langs = [s.strip() for s in (fields.get('langs') or '').split(',') if s.strip()]
-        results = split_mod.split_by_lang(src, self.server.outputs, langs=langs or None)
+        sess = self.server.sessions.get(self._sid())
+        out_dir = sess['dir'] if sess else self.server.outputs
+        results = split_mod.split_by_lang(src, out_dir, langs=langs or None)
         return {'title': t('web.ok.split', len(results), ', '.join(sorted(results))),
                 'files': [self._offer(p) for p in results.values()]}
 
@@ -1028,16 +1110,26 @@ def main():
     ap.add_argument('--no-browser', action='store_true', help=t('cli.web_nobrowser'))
     ap.add_argument('--lang', choices=['en', 'zh'], default=None,
                     help='interface language / 界面语言')
+    ap.add_argument('--public', action='store_true',
+                    help='serve on a public interface: refuse server-side paths, '
+                         'isolate visitors, rate-limit, and expire uploads')
+    ap.add_argument('--host', default=None,
+                    help='bind address (default 127.0.0.1, or 0.0.0.0 with --public)')
+    ap.add_argument('--ttl', type=float, default=1800.0,
+                    help='seconds an idle session keeps its files (default 1800)')
     args = ap.parse_args()
     if args.lang:
         set_lang(args.lang)
 
     # walk forward if the port is taken, so "one is already running" does not
     # surface as a bare Address already in use
+    cfg = Config(public=args.public, ttl=args.ttl)
+    host = args.host or ('0.0.0.0' if args.public else HOST)  # noqa: S104
+
     srv, port = None, args.port
     for candidate in range(args.port, args.port + 20):
         try:
-            srv = HTTPServer((HOST, candidate), Handler)
+            srv = ThreadingHTTPServer((host, candidate), Handler)
             port = candidate
             break
         except OSError:
@@ -1053,15 +1145,28 @@ def main():
     srv.outputs = os.path.join(workdir, 'outputs')
     os.makedirs(srv.uploads)
     os.makedirs(srv.outputs)
+    srv.cfg = cfg
     srv.offered = build_demo(workdir)
+    srv.sessions = guard.Sessions(os.path.join(workdir, 'sessions'), ttl=args.ttl)
+    srv.limiter = guard.RateLimit()
+    srv.slots = threading.BoundedSemaphore(2)
+    reaper = guard.Reaper(srv.sessions, srv.limiter)
+    reaper.start()
 
-    url = 'http://%s:%d' % (HOST, port)
+    url = 'http://%s:%d' % ('127.0.0.1' if host in ('0.0.0.0', '') else host, port)  # noqa: S104
     print('\n  \U0001F4D6  %s' % t('app.name'))
     print('  %s' % url)
     print(t('web.open_hint'))
     print(t('web.stop_hint'))
 
-    if not args.no_browser:
+    if args.public:
+        print('  public mode: server-side paths refused, one scratch area per '
+              'visitor, rate limited, uploads expire after %d min.'
+              % (args.ttl // 60))
+        print('  this is not bot protection -- put Turnstile or an '
+              'authenticating proxy in front if you need that.\n')
+
+    if not args.no_browser and not args.public:
         # wait until the server is really listening before opening a browser,
         # otherwise it can race ahead and hit a connection error
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

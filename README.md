@@ -139,6 +139,25 @@ script, so it degrades to plain visible text in readers that allow neither.
   paragraph, in which case everything lands in one bucket and there is nothing
   to separate.
 
+## Running it on a server
+
+The local web UI assumes one trusted user on their own machine. `--public`
+switches those assumptions for a host other people can reach:
+
+```bash
+bilingual-epub-web --public --port 8799
+```
+
+That refuses server-side paths (locally the path field opens anything you
+could open yourself; on a public host that is an arbitrary-file-read hole),
+gives every visitor an isolated scratch directory so nobody can download
+anybody else's books, rate-limits per address, caps uploads at 25 MB, and
+deletes idle sessions after 30 minutes (`--ttl`).
+
+It is not bot protection. Cookies and rate limits raise the cost of casual
+scripting and nothing more — if you need to tell a person from a program, put
+Cloudflare Turnstile or an authenticating proxy in front of it.
+
 ## Bring your own books
 
 This repository contains no real books, and `*.epub` is gitignored apart from

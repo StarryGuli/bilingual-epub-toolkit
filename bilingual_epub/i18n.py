@@ -309,6 +309,22 @@ STRINGS = {
     'web.crashed':       ('Something went wrong handling that file. The details '
                           'are in the terminal running this server.',
                           '处理这个文件时出错了。详细报错在跑这个服务的终端窗口里。'),
+    'web.no_session':    ('Your session expired. Reload the page and try again.',
+                          '会话已过期，刷新页面重试。'),
+    'web.stale_page':    ('This page is out of date. Reload it and try again.',
+                          '这个页面已经过期了，刷新一下重试。'),
+    'web.slow_down':     ('Too many jobs from your address. Try again in about '
+                          '%d seconds.',
+                          '你这个地址提交得太频繁了，大约 %d 秒后再试。'),
+    'web.quota':         ('You have hit this session\'s file limit. Reload the page '
+                          'to start a fresh one.',
+                          '这个会话的文件数或体积到上限了，刷新页面重开一个。'),
+    'web.no_paths':      ('This server does not accept server-side paths. Upload the '
+                          'file instead.',
+                          '这个服务器不接受填路径，请直接把文件传上来。'),
+    'web.public_note':   ('Uploads are deleted automatically after a while, and only '
+                          'you can download what you made.',
+                          '上传的文件过一阵会自动删除；你做出来的东西也只有你能下载。'),
     'web.pv.real':       ('These are real files, built by the same code the buttons '
                           'below use. Download any of them and open it in a reader.',
                           '这三个是真文件，跟下面按钮走的是同一套代码。'
