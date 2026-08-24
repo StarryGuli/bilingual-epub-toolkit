@@ -322,6 +322,13 @@ STRINGS = {
     'web.no_paths':      ('This server does not accept server-side paths. Upload the '
                           'file instead.',
                           '这个服务器不接受填路径，请直接把文件传上来。'),
+    'web.cf_missing':    ('Please complete the verification above first.',
+                          '请先完成上面那个验证。'),
+    'web.cf_failed':     ('Verification failed — reload the page and try again.',
+                          '验证没通过，刷新页面重试。'),
+    'web.cf_down':       ('Cannot reach the verification service right now. '
+                          'Try again in a moment.',
+                          '暂时连不上验证服务，过一会儿再试。'),
     'web.public_note':   ('Uploads are deleted automatically after a while, and only '
                           'you can download what you made.',
                           '上传的文件过一阵会自动删除；你做出来的东西也只有你能下载。'),

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%"
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/hero.svg" width="100%"
        alt="Bilingual EPUB Toolkit —— 两本单语 EPUB 进，一本对照书出，译文糊住，点一下才显示">
 </p>
 
@@ -138,8 +138,21 @@ bilingual-epub-web --public --port 8799
 放公网就是任意文件读取漏洞）、每个访客一个隔离的临时目录（谁都下载不到别人的书）、
 按来源地址限流、上传上限降到 25 MB、闲置会话 30 分钟后自动清除（`--ttl` 可调）。
 
-**这不是防机器人。** Cookie 和限流只能抬高随手写脚本的成本，仅此而已——
-真要区分真人和程序，得在前面加 Cloudflare Turnstile 或者一层带认证的反向代理。
+### 挡住机器人，但不挡住人
+
+光靠 Cookie 和限流拦不住铁了心要刷的人：换 IP 就绕开令牌桶，跑个无头浏览器拿 Cookie
+跟真人一样容易。真正抬高成本的是 Turnstile——而且跟密码不同，它对访客是零成本的，
+服务照样对所有人开放。
+
+```bash
+export TURNSTILE_SITEKEY=0x...      # Cloudflare 后台 Turnstile 里拿
+export TURNSTILE_SECRET=0x...
+bilingual-epub-web --public
+```
+
+之后每一次任务在执行前都会向 Cloudflare 校验一次。校验是**失败即拒**的：连不上
+Cloudflare 时任务直接拒绝，而不是悄悄放行。不配密钥就不渲染控件、也不做校验，
+本地跑就该是这样。
 
 ## 书自己准备
 

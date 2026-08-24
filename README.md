@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%"
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/hero.svg" width="100%"
        alt="Bilingual EPUB Toolkit — two monolingual EPUBs in, one facing-text book out, with the translation blurred until tapped">
 </p>
 
@@ -154,9 +154,23 @@ gives every visitor an isolated scratch directory so nobody can download
 anybody else's books, rate-limits per address, caps uploads at 25 MB, and
 deletes idle sessions after 30 minutes (`--ttl`).
 
-It is not bot protection. Cookies and rate limits raise the cost of casual
-scripting and nothing more — if you need to tell a person from a program, put
-Cloudflare Turnstile or an authenticating proxy in front of it.
+### Keeping bots out without shutting people out
+
+Cookies and rate limits alone do not stop a determined bot: rotating addresses
+defeats the bucket, and a headless browser collects a cookie as readily as a
+person does. Turnstile is what actually raises that cost, and unlike a password
+it costs a visitor nothing — the service stays open to everyone.
+
+```bash
+export TURNSTILE_SITEKEY=0x...      # from the Cloudflare dashboard, Turnstile
+export TURNSTILE_SECRET=0x...
+bilingual-epub-web --public
+```
+
+Every job is then verified with Cloudflare before it runs. Verification fails
+closed: if Cloudflare cannot be reached the job is refused rather than quietly
+let through. With no keys set, the widget is not rendered and nothing is
+checked, which is what you want locally.
 
 ## Bring your own books
 

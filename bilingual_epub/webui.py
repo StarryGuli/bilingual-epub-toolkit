@@ -281,6 +281,8 @@ select { appearance: none; cursor: pointer;
 .pv-tap { margin-top: .6rem; color: var(--ink-soft); font-size: .74rem; text-align: center; }
 
 /* ---- button ------------------------------------------------------------ */
+.cf-turnstile { margin: 1rem 0 .2rem; min-height: 1px; }
+
 .go {
   appearance: none; border: 0; cursor: pointer;
   width: 100%; margin-top: .4rem; padding: .75rem 1.5rem;
@@ -495,6 +497,9 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
       esc(err) + '</pre></div>';
   } finally {
     btn.disabled = false; btn.classList.remove('busy');
+    // a Turnstile token is single-use: without resetting, a second submit
+    // replays a spent one and is rejected
+    if (window.turnstile) { try { turnstile.reset(); } catch (e) { /* not rendered */ } }
     out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }));
@@ -509,8 +514,10 @@ class Config:
     tightens every one of those assumptions.
     """
 
-    def __init__(self, public=False, max_upload=None, ttl=1800.0):
+    def __init__(self, public=False, max_upload=None, ttl=1800.0, turnstile=None):
         self.public = public
+        # off unless a key pair is configured; see guard.Turnstile
+        self.turnstile = turnstile or guard.Turnstile()
         # a public host processes strangers' files on someone else's disk, so
         # the ceiling is much lower than what a local user should be allowed
         self.max_upload = max_upload or (25 * 1024 * 1024 if public
@@ -733,6 +740,7 @@ def _merge_panel(cfg, page_token):
         '</div>'
         '<div class="field"><label>' + t('web.title') + '</label>'
         '<input type="text" name="title" placeholder="' + t('web.title.ph') + '"></div>'
+        + cfg.turnstile.widget_html() +
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.merge') + '</button>'
         '</div>' + _merge_preview() + '</div></form>'
@@ -751,6 +759,7 @@ def _split_panel(cfg, page_token):
         + '<div class="field"><label>' + t('web.langs') + '</label>'
         '<input type="text" name="langs" placeholder="en,fr">'
         '<span class="hint">' + t('web.langs.hint') + '</span></div>'
+        + cfg.turnstile.widget_html() +
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.split') + '</button>'
         '</div>' + _split_preview() + '</div></form>'
@@ -774,7 +783,8 @@ def _remerge_panel(cfg, page_token):
         '<input type="text" name="b_lang" placeholder="fr">'
         '<span class="hint">' + t('web.blang.hint') + '</span></div>'
         '</div>'
-        + _blur_controls() +
+        + _blur_controls()
+        + cfg.turnstile.widget_html() +
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.remerge') + '</button>'
         '</div>' + _remerge_preview() + '</div></form>'
@@ -802,7 +812,8 @@ PAGE = (
     '</div>'
     '__MERGE__' '__SPLIT__' '__REMERGE__'
     '<footer>__FOOTER__ <span class="host">__LOCAL__</span></footer>'
-    '</div><script>const L=__LABELS__;</script><script>__JS__</script></body></html>')
+    '</div>__CFSCRIPT__<script>const L=__LABELS__;</script>'
+    '<script>__JS__</script></body></html>')
 
 
 def render_page(cfg=None, page_token=''):
@@ -830,6 +841,7 @@ def render_page(cfg=None, page_token=''):
             .replace('__MERGE__', _merge_panel(cfg, page_token))
             .replace('__SPLIT__', _split_panel(cfg, page_token))
             .replace('__REMERGE__', _remerge_panel(cfg, page_token))
+            .replace('__CFSCRIPT__', cfg.turnstile.script_tag())
             .replace('__LABELS__', labels)
             .replace('__JS__', JS))
 
@@ -1033,6 +1045,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'error': t('web.stale_page')}, status=403)
             return
 
+        ok, why = cfg.turnstile.verify(
+            fields.get('cf-turnstile-response', ''), self.client_address[0])
+        if not ok:
+            msg = {'missing': t('web.cf_missing'),
+                   'unreachable': t('web.cf_down')}.get(why, t('web.cf_failed'))
+            self._json({'ok': False, 'error': msg}, status=403)
+            return
+
         buf = io.StringIO()
         real_stdout, sys.stdout = sys.stdout, buf
         # aligning a book is CPU-bound; a few in parallel will bury a small host
@@ -1117,13 +1137,19 @@ def main():
                     help='bind address (default 127.0.0.1, or 0.0.0.0 with --public)')
     ap.add_argument('--ttl', type=float, default=1800.0,
                     help='seconds an idle session keeps its files (default 1800)')
+    ap.add_argument('--turnstile-sitekey', default=None,
+                    help='Cloudflare Turnstile site key (or TURNSTILE_SITEKEY)')
+    ap.add_argument('--turnstile-secret', default=None,
+                    help='Cloudflare Turnstile secret (or TURNSTILE_SECRET)')
     args = ap.parse_args()
     if args.lang:
         set_lang(args.lang)
 
     # walk forward if the port is taken, so "one is already running" does not
     # surface as a bare Address already in use
-    cfg = Config(public=args.public, ttl=args.ttl)
+    cfg = Config(public=args.public, ttl=args.ttl,
+                 turnstile=guard.Turnstile(args.turnstile_sitekey,
+                                           args.turnstile_secret))
     host = args.host or ('0.0.0.0' if args.public else HOST)  # noqa: S104
 
     srv, port = None, args.port
@@ -1163,8 +1189,14 @@ def main():
         print('  public mode: server-side paths refused, one scratch area per '
               'visitor, rate limited, uploads expire after %d min.'
               % (args.ttl // 60))
-        print('  this is not bot protection -- put Turnstile or an '
-              'authenticating proxy in front if you need that.\n')
+        if cfg.turnstile.enabled:
+            print('  Turnstile is on: every job is verified with Cloudflare '
+                  'before it runs.\n')
+        else:
+            print('  Turnstile is OFF -- cookies and rate limits only, which a '
+                  'headless browser walks straight through.')
+            print('  Set --turnstile-sitekey/--turnstile-secret (or the '
+                  'TURNSTILE_* env vars) to turn it on.\n')
 
     if not args.no_browser and not args.public:
         # wait until the server is really listening before opening a browser,
