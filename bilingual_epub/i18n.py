@@ -306,6 +306,9 @@ STRINGS = {
                           'behaves the same way',
                           '点一下糊住的那行就会显示 —— 做出来的书就是这个行为'),
     'web.pv.download':   ('download', '下载'),
+    'web.crashed':       ('Something went wrong handling that file. The details '
+                          'are in the terminal running this server.',
+                          '处理这个文件时出错了。详细报错在跑这个服务的终端窗口里。'),
     'web.pv.real':       ('These are real files, built by the same code the buttons '
                           'below use. Download any of them and open it in a reader.',
                           '这三个是真文件，跟下面按钮走的是同一套代码。'

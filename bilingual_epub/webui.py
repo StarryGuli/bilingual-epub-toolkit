@@ -15,6 +15,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import sys
 import tempfile
@@ -877,8 +878,13 @@ class Handler(BaseHTTPRequestHandler):
                    status=status, ctype='application/json; charset=utf-8')
 
     def _offer(self, path):
-        """Register a built file for download and return its handle."""
-        token = str(len(self.server.offered) + 1)
+        """Register a built file for download and return its handle.
+
+        The handle is random, not a counter. Sequential ids are harmless when
+        the only client is you on localhost, but they mean anyone who can
+        reach the server can walk the numbers and collect everybody's books.
+        """
+        token = secrets.token_urlsafe(18)
         self.server.offered[token] = path
         return {'id': token, 'name': os.path.basename(path)}
 
@@ -956,9 +962,13 @@ class Handler(BaseHTTPRequestHandler):
             payload['log'] = buf.getvalue().strip()
             payload['ok'] = True
         except SystemExit as e:
+            # these carry a message written for a person to read
             payload = {'ok': False, 'error': str(e)}
         except Exception:
-            payload = {'ok': False, 'error': traceback.format_exc()}
+            # an unexpected failure: log it here, but do not ship the traceback
+            # to the browser -- it carries absolute server paths and internals
+            traceback.print_exc(file=sys.stderr)
+            payload = {'ok': False, 'error': t('web.crashed')}
         finally:
             sys.stdout = real_stdout
         self._json(payload)

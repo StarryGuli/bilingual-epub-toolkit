@@ -144,3 +144,18 @@ def en_epub_png_cover(tmp_path):
     """Same book, but the cover really is a PNG."""
     return build_epub(tmp_path / 'en_png.epub', 'en', 'The Invented Town',
                       'A. N. Other', EN_CHAPTERS, has_cover=True, cover_fmt='png')
+
+
+@pytest.fixture
+def untitled_epub(tmp_path):
+    """A book whose chapters carry no heading at all."""
+    return build_epub(tmp_path / 'untitled.epub', 'en', 'No Headings Anywhere',
+                      'A. N. Other', [('', ['One flat paragraph.',
+                                            'And a second one.'])])
+
+
+@pytest.fixture
+def untitled_fr_epub(tmp_path):
+    return build_epub(tmp_path / 'untitled_fr.epub', 'fr', 'Aucun Titre',
+                      'A. N. Other', [('', ['Un paragraphe tout simple.',
+                                            'Et un deuxi\u00e8me.'])])

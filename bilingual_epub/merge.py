@@ -120,7 +120,15 @@ def _convert_frag(cc, frag):
 
 
 def _plain(frag):
-    return re.sub(r'<[^>]+>', '', frag).strip()
+    """Strip tags from a fragment.
+
+    Tolerates None: a chapter can legitimately have no heading on either side,
+    and the caller falls back to a generated title. This used to raise a
+    TypeError deep inside re.sub, which crashed the whole merge on any book
+    with an untitled chapter -- the exact case the README says degrades to a
+    single chapter.
+    """
+    return re.sub(r'<[^>]+>', '', frag).strip() if frag else ''
 
 
 def render_chapter(cid, idx, title_a, title_b, bead_slice, blur_side, blur_em,

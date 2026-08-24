@@ -277,3 +277,16 @@ def test_sample_books_build_and_merge_cleanly(tmp_path):
     body = read_chapter(out)
     assert PREVIEW_EN[0] in body
     assert PREVIEW_FR[0] in body
+
+
+def test_book_with_no_headings_does_not_crash(untitled_epub, untitled_fr_epub, tmp_path):
+    """Regression: _plain() was handed None when neither side had a heading and
+    raised a TypeError out of re.sub, taking the whole merge down. The README
+    promises this case degrades to a single chapter, so it has to survive it."""
+    out = str(tmp_path / 'bi.epub')
+    _out, stats = merge_bilingual(untitled_epub, untitled_fr_epub, out)
+    assert os.path.exists(out)
+    assert stats, 'should still produce a chapter'
+    html = read_chapter(out)
+    assert 'One flat paragraph.' in html
+    assert 'Un paragraphe tout simple.' in html
