@@ -151,6 +151,62 @@ script, so it degrades to plain visible text in readers that allow neither.
   paragraph, in which case everything lands in one bucket and there is nothing
   to separate.
 
+## Only have the book in one language?
+
+There is no second edition to merge against, so make one. Both routes produce a
+translation that is *structurally parallel* to the original — same blocks, same
+order — which is why the merge that follows comes out 100% one-to-one instead of
+the ~90% two independently published editions give you.
+
+### Let your own coding agent translate it
+
+This costs no API key at all: the agent translates on the subscription you are
+already paying for.
+
+```bash
+bilingual-epub skill            # writes .claude/skills/bilingual-epub/SKILL.md
+```
+
+Then ask your agent for a bilingual edition of the book. The skill tells it to
+export the text, translate it, and fold it back in. You can also grab the file
+from the [hosted instance](https://epub.starry-files.duckdns.org/skill).
+
+Under the hood it is three commands, usable by hand too:
+
+```bash
+bilingual-epub export-text --in book.epub --out book.json
+# …translate book.json into translated.json…
+bilingual-epub import-text --export book.json --text translated.json \
+    --out book.zh.epub --lang zh
+```
+
+The translation may be a JSON array of strings, a JSON object with a `blocks`
+list, or plain text one block per line. A file whose block count does not match
+is rejected rather than accepted — a translation one block short would shift
+every later paragraph against the wrong original.
+
+### Or use an API key
+
+Bring your own endpoint; the bill lands on your account.
+
+```bash
+bilingual-epub translate --in book.epub --out book.zh.epub --to zh \
+    --base-url https://api.deepseek.com/v1 --api-key "$KEY" --model deepseek-chat
+```
+
+`--dialect openai` (the default) covers OpenAI, DeepSeek, Moonshot, Zhipu,
+SiliconFlow, OpenRouter, Groq, Together and any local server speaking
+`/chat/completions` — Ollama, LM Studio, vLLM. `--dialect anthropic` uses
+`/v1/messages`.
+
+- `--dry-run` reports blocks, characters and request count without spending
+  anything
+- progress is cached next to the output, so an interrupted run resumes instead
+  of paying twice
+- a batch that comes back the wrong length is retried, then halved, then done
+  one block at a time — never silently accepted
+- keys also read from `BILINGUAL_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+
 ## Running it on a server
 
 The local web UI assumes one trusted user on their own machine. `--public`

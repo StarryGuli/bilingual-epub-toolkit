@@ -162,6 +162,66 @@ STRINGS = {
     'cli.no_blur':       ('plain facing text, nothing hidden -- the same as '
                           '--blur-side none',
                           '纯对照排版，什么都不糊 —— 等同 --blur-side none'),
+    'cli.translate':     ('translate a one-language book with your own model API',
+                          '用你自己的模型 API 把单语书翻译出另一种语言'),
+    'cli.export':        ('dump the paragraphs so something else can translate them',
+                          '把段落导出，交给别的东西去翻译'),
+    'cli.import':        ('fold a finished translation back into an EPUB',
+                          '把翻译好的文本装回成 EPUB'),
+    'cli.tr_in':         ('source EPUB', '源 EPUB'),
+    'cli.tr_out':        ('output EPUB', '输出 EPUB'),
+    'cli.tr_to':         ('target language, e.g. zh, "Simplified Chinese", fr',
+                          '目标语言，例如 zh、简体中文、fr'),
+    'cli.tr_dialect':    ('API shape: openai (/chat/completions) or anthropic '
+                          '(/v1/messages). Default openai.',
+                          'API 形状：openai(/chat/completions) 或 anthropic'
+                          '(/v1/messages)，默认 openai'),
+    'cli.tr_base':       ('API base URL, e.g. https://api.deepseek.com/v1 or '
+                          'http://localhost:11434/v1 (env BILINGUAL_API_BASE)',
+                          'API 地址，例如 https://api.deepseek.com/v1 或 '
+                          'http://localhost:11434/v1（环境变量 BILINGUAL_API_BASE）'),
+    'cli.tr_key':        ('your API key (env BILINGUAL_API_KEY / OPENAI_API_KEY / '
+                          'ANTHROPIC_API_KEY)',
+                          '你自己的 API key（环境变量 BILINGUAL_API_KEY / '
+                          'OPENAI_API_KEY / ANTHROPIC_API_KEY）'),
+    'cli.tr_model':      ('model name (env BILINGUAL_MODEL)',
+                          '模型名（环境变量 BILINGUAL_MODEL）'),
+    'cli.tr_batch':      ('paragraphs per request, default 20',
+                          '每次请求发多少段，默认 20'),
+    'cli.tr_retries':    ('attempts per batch before splitting it, default 3',
+                          '每批重试几次后才拆小，默认 3'),
+    'cli.tr_timeout':    ('seconds per request, default 180',
+                          '单次请求超时秒数，默认 180'),
+    'cli.tr_cache':      ('progress file; rerunning resumes from it '
+                          '(default: <out>.progress.json)',
+                          '进度文件，重跑会从这里续上（默认 <out>.progress.json）'),
+    'cli.tr_keepcache':  ('keep the progress file after finishing',
+                          '完成后保留进度文件'),
+    'cli.tr_dry':        ('report size and request count, call nothing',
+                          '只报块数/字数/请求数，不实际调用'),
+    'cli.tr_quiet':      ('no progress output', '不打印进度'),
+    'cli.tr_title':      ('override the output book title', '覆盖输出书名'),
+    'cli.ex_out':        ('output .json', '输出的 .json'),
+    'cli.im_export':     ('the .json produced by export-text',
+                          'export-text 产出的那个 .json'),
+    'cli.im_text':       ('the translation: JSON array of strings, JSON with a '
+                          '"blocks" list, or one block per line',
+                          '译文：字符串 JSON 数组、带 "blocks" 的 JSON，或每行一段的纯文本'),
+    'cli.im_lang':       ('language code for the translated book, e.g. zh',
+                          '译文的语言代码，例如 zh'),
+    'cli.exported':      ('wrote %s -- %d blocks, %d characters',
+                          '已导出 %s —— %d 个块，%d 字符'),
+    'cli.skill':         ('install the agent skill into your project, so your own '
+                          'coding agent can drive this tool',
+                          '把 agent skill 装进你的项目，让你自己的编码 agent 会用这个工具'),
+    'cli.skill_out':     ('where to write it, default .claude/skills',
+                          '写到哪里，默认 .claude/skills'),
+    'cli.skill_wrote':   ('wrote %s\n  Your agent will pick it up next session. It '
+                          'translates with your own subscription -- no API key needed.',
+                          '已写入 %s\n  下次会话你的 agent 就会认得它。'
+                          '翻译走你自己的订阅额度，不需要 API key。'),
+    'cli.tr_plan':       ('%d blocks, %d characters, about %d requests',
+                          '共 %d 个块，%d 字符，约 %d 次请求'),
     'cli.workdir':       ('scratch directory; defaults to a temp dir, cleaned up after',
                           '中间文件目录，默认用系统临时目录，用完自动清理'),
     'cli.toggle_label':  ('text for the show/hide-all button inside the book',
@@ -322,6 +382,16 @@ STRINGS = {
     'web.no_paths':      ('This server does not accept server-side paths. Upload the '
                           'file instead.',
                           '这个服务器不接受填路径，请直接把文件传上来。'),
+    'web.agent_note':    ('Only have the book in one language? Install it locally '
+                          '(<code>pip install bilingual-epub-toolkit</code>) and it can '
+                          'translate the other side with your own API key — or drop the '
+                          '<a href="/skill" download>agent skill</a> into your project and '
+                          'let your own coding agent translate it on the subscription you '
+                          'already pay for.',
+                          '书只有一种语言？装到本地（<code>pip install bilingual-epub-toolkit</code>）'
+                          '就能用你自己的 API key 翻出另一侧；或者把'
+                          '<a href="/skill" download>agent skill</a> 放进你的项目，'
+                          '让你自己的编码 agent 用你已经在付的订阅额度翻。'),
     'web.cf_missing':    ('Please complete the verification above first.',
                           '请先完成上面那个验证。'),
     'web.cf_failed':     ('Verification failed — reload the page and try again.',

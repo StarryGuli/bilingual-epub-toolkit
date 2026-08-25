@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """CLI entry point for the generic bilingual-EPUB toolkit.
 
-Three subcommands:
+Subcommands:
   merge    two monolingual EPUBs (any book, any language pair)  -> one bilingual EPUB
   split    one bilingual (or multi-language) EPUB                -> N monolingual EPUBs
   remerge  one existing bilingual EPUB, re-rendered w/ new options -> a new bilingual EPUB
            (= split then merge again; handy for "I have a bilingual book from
            somewhere else and want it in this tool's tap-to-reveal style", or
            "same book, different blur/opencc settings")
+
+For a book that exists in only one language, there is no second edition to
+merge against, so make one:
+  translate    call your own model API and write the translated edition
+  export-text  dump the paragraphs for something else to translate
+  import-text  fold a finished translation back into an EPUB
+
+export/import is the route for an agent that already has your subscription:
+it translates the exported file itself, so no API key is involved at all.
+
+  skill        drop the agent instructions into your own project
 
 Messages and help are English or Chinese, following the system locale;
 override with --lang or BILINGUAL_EPUB_LANG.
@@ -18,7 +29,52 @@ import sys
 
 from . import merge as merge_mod
 from . import split as split_mod
+from . import textio
 from .i18n import set_lang, t
+
+
+def cmd_skill(args):
+    """Copy the agent skill into the user's own project."""
+    import shutil
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'skill', 'SKILL.md')
+    dest_dir = os.path.join(args.out, 'bilingual-epub')
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, 'SKILL.md')
+    shutil.copyfile(src, dest)
+    print(t('cli.skill_wrote', dest))
+
+
+def cmd_export_text(args):
+    payload = textio.export_text(args.input, workdir=args.workdir)
+    textio.write_export(payload, args.out)
+    chars = sum(len(b['text']) for b in payload['blocks'])
+    print(t('cli.exported', args.out, len(payload['blocks']), chars))
+
+
+def cmd_import_text(args):
+    out = textio.import_text(args.export, args.text, args.out,
+                             lang=args.lang, title=args.title)
+    print(t('cli.wrote', out, os.path.getsize(out) // 1024))
+
+
+def cmd_translate(args):
+    from . import translate as tr
+    payload = textio.export_text(args.input, workdir=args.workdir)
+    est = tr.estimate(payload, args.batch_size)
+    print(t('cli.tr_plan', est['blocks'], est['chars'], est['requests']),
+          file=sys.stderr)
+    if args.dry_run:
+        return
+    provider = tr.provider_from_args(args)
+    cache = args.cache or (args.out + '.progress.json')
+    texts = tr.translate_payload(
+        payload, provider, args.to, batch_size=args.batch_size,
+        cache_path=cache, retries=args.retries,
+        on_progress=tr.progress_printer(args.quiet))
+    textio.build_epub(payload, texts, args.out, args.to, title=args.title)
+    if not args.keep_cache and os.path.exists(cache):
+        os.remove(cache)
+    print(t('cli.wrote', args.out, os.path.getsize(args.out) // 1024))
 
 
 def cmd_merge(args):
@@ -133,6 +189,47 @@ def main(argv=None):
     pr.add_argument('--toggle-label', default='Show / Hide translation',
                     help=t('cli.toggle_label'))
     pr.set_defaults(func=cmd_remerge)
+
+    # ---- translate: your API, your bill ---------------------------------- #
+    pt = sub.add_parser('translate', help=t('cli.translate'))
+    pt.add_argument('--in', dest='input', required=True, help=t('cli.tr_in'))
+    pt.add_argument('--out', required=True, help=t('cli.tr_out'))
+    pt.add_argument('--to', required=True, help=t('cli.tr_to'))
+    pt.add_argument('--dialect', choices=['openai', 'anthropic'], default='openai',
+                    help=t('cli.tr_dialect'))
+    pt.add_argument('--base-url', default=None, help=t('cli.tr_base'))
+    pt.add_argument('--api-key', default=None, help=t('cli.tr_key'))
+    pt.add_argument('--model', default=None, help=t('cli.tr_model'))
+    pt.add_argument('--batch-size', type=int, default=20, help=t('cli.tr_batch'))
+    pt.add_argument('--retries', type=int, default=3, help=t('cli.tr_retries'))
+    pt.add_argument('--timeout', type=float, default=180.0, help=t('cli.tr_timeout'))
+    pt.add_argument('--cache', default=None, help=t('cli.tr_cache'))
+    pt.add_argument('--keep-cache', action='store_true', help=t('cli.tr_keepcache'))
+    pt.add_argument('--dry-run', action='store_true', help=t('cli.tr_dry'))
+    pt.add_argument('--quiet', action='store_true', help=t('cli.tr_quiet'))
+    pt.add_argument('--title', default=None, help=t('cli.tr_title'))
+    pt.add_argument('--workdir', default=None, help=t('cli.workdir'))
+    pt.set_defaults(func=cmd_translate)
+
+    # ---- export-text / import-text: let something else translate --------- #
+    pe = sub.add_parser('export-text', help=t('cli.export'))
+    pe.add_argument('--in', dest='input', required=True, help=t('cli.tr_in'))
+    pe.add_argument('--out', required=True, help=t('cli.ex_out'))
+    pe.add_argument('--workdir', default=None, help=t('cli.workdir'))
+    pe.set_defaults(func=cmd_export_text)
+
+    pi = sub.add_parser('import-text', help=t('cli.import'))
+    pi.add_argument('--export', required=True, help=t('cli.im_export'))
+    pi.add_argument('--text', required=True, help=t('cli.im_text'))
+    pi.add_argument('--out', required=True, help=t('cli.tr_out'))
+    pi.add_argument('--lang', default=None, help=t('cli.im_lang'))
+    pi.add_argument('--title', default=None, help=t('cli.tr_title'))
+    pi.set_defaults(func=cmd_import_text)
+
+    # ---- skill: hand the agent instructions to the user's own codebase --- #
+    pk = sub.add_parser('skill', help=t('cli.skill'))
+    pk.add_argument('--out', default='.claude/skills', help=t('cli.skill_out'))
+    pk.set_defaults(func=cmd_skill)
 
     args = p.parse_args(argv)
     # --no-blur is the plain-language spelling of --blur-side none

@@ -51,6 +51,11 @@ bilingual-epub-web = "bilingual_epub.webui:main"
 [tool.hatch.build.targets.wheel]
 packages = ["bilingual_epub"]
 
+# the agent skill ships with the package: `bilingual-epub skill` copies it into
+# the user's own project, so it has to survive `pip install`
+[tool.hatch.build.targets.wheel.force-include]
+"bilingual_epub/skill/SKILL.md" = "bilingual_epub/skill/SKILL.md"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/bilingual_epub",

@@ -135,6 +135,53 @@ bilingual-epub remerge --in old.epub --out new.epub --blur-side a --blur 0.35em
 - **`split` 依赖逐段的 `lang` 标注。** 这个工具自己合出来的书一定能干净拆开；
   别处来的双语书很多没有逐段标语言，那种情况下所有内容会落进同一个桶，等于拆不开。
 
+## 书只有一种语言怎么办
+
+没有第二个版本可以合并，那就做一个出来。两条路子产出的译文都跟原文**结构完全平行**
+——同样的块、同样的顺序——所以后面合并出来是 100% 一对一，而不是两个独立出版的版本
+那种九成左右。
+
+### 让你自己的编码 agent 去翻
+
+这条**完全不需要 API key**：agent 用的是你已经在付的订阅额度。
+
+```bash
+bilingual-epub skill            # 写出 .claude/skills/bilingual-epub/SKILL.md
+```
+
+然后直接让你的 agent 把这本书做成双语版就行。skill 会告诉它怎么导出文本、翻译、
+再装回去。也可以从[线上那台](https://epub.starry-files.duckdns.org/skill)直接下载这个文件。
+
+底层就是三条命令，手动也能用：
+
+```bash
+bilingual-epub export-text --in book.epub --out book.json
+# ……把 book.json 翻译成 translated.json……
+bilingual-epub import-text --export book.json --text translated.json \
+    --out book.zh.epub --lang zh
+```
+
+译文可以是字符串 JSON 数组、带 `blocks` 的 JSON 对象，或者每行一段的纯文本。
+块数对不上会直接报错而不是将就——少一块，后面每一段都会跟错误的原文配对。
+
+### 或者用 API key
+
+自己带 endpoint，账单记在你自己头上。
+
+```bash
+bilingual-epub translate --in book.epub --out book.zh.epub --to zh \
+    --base-url https://api.deepseek.com/v1 --api-key "$KEY" --model deepseek-chat
+```
+
+`--dialect openai`（默认）覆盖 OpenAI、DeepSeek、月之暗面、智谱、硅基流动、
+OpenRouter、Groq、Together，以及任何说 `/chat/completions` 的本地服务——Ollama、
+LM Studio、vLLM。`--dialect anthropic` 走 `/v1/messages`。
+
+- `--dry-run` 先报块数/字数/请求数，一分钱不花
+- 进度存在输出文件旁边，中断之后重跑会续上，不会重复付费
+- 一批返回的条数不对会重试、再对半拆、最后逐块翻——绝不将就接受
+- key 也可以从 `BILINGUAL_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 读
+
 ## 放到服务器上跑
 
 本地网页版默认「一个可信用户、在自己电脑上」。`--public` 会把这些假设全部换掉，

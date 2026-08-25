@@ -334,6 +334,12 @@ pre { margin: .6rem 0 0; padding: .8rem; overflow-x: auto;
       transition: filter .16s ease; }
 .dl:hover { filter: brightness(1.08); }
 
+.agent { margin: 0 0 1rem; padding: .8rem 1rem; border-radius: var(--radius);
+         background: var(--accent-soft); color: var(--ink); line-height: 1.6; }
+.agent code { font-size: .92em; background: var(--panel); padding: .1rem .3rem;
+              border-radius: 4px; }
+.agent a { color: var(--accent); font-weight: 600; }
+
 footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
          color: var(--ink-soft); font-size: .8rem; }
 
@@ -811,7 +817,8 @@ PAGE = (
     '<button class="tab" data-tab="remerge" role="tab" aria-selected="false">__T_REMERGE__</button>'
     '</div>'
     '__MERGE__' '__SPLIT__' '__REMERGE__'
-    '<footer>__FOOTER__ <span class="host">__LOCAL__</span></footer>'
+    '<footer><p class="agent">__AGENT__</p>'
+    '__FOOTER__ <span class="host">__LOCAL__</span></footer>'
     '</div>__CFSCRIPT__<script>const L=__LABELS__;</script>'
     '<script>__JS__</script></body></html>')
 
@@ -835,6 +842,7 @@ def render_page(cfg=None, page_token=''):
             .replace('__T_MERGE__', t('web.tab.merge'))
             .replace('__T_SPLIT__', t('web.tab.split'))
             .replace('__T_REMERGE__', t('web.tab.remerge'))
+            .replace('__AGENT__', t('web.agent_note'))
             .replace('__FOOTER__', t('web.footer') +
                      (' ' + t('web.public_note') if cfg.public else ''))
             .replace('__LOCAL__', t('app.local_only'))
@@ -989,6 +997,14 @@ class Handler(BaseHTTPRequestHandler):
                                 'bes=%s; Path=/; HttpOnly; SameSite=Strict' % sid))
             self._send(render_page(self.server.cfg, sess['page_token']),
                        headers=headers)
+        elif p.path == '/skill':
+            # the agent route: hand over the instructions so someone's own
+            # coding agent can drive this tool on their own subscription
+            here = os.path.dirname(os.path.abspath(__file__))
+            with open(os.path.join(here, 'skill', 'SKILL.md'), 'rb') as f:
+                data = f.read()
+            self._send(data, ctype='text/markdown; charset=utf-8', headers=[
+                ('Content-Disposition', 'attachment; filename="SKILL.md"')])
         elif p.path == '/download':
             token = urllib.parse.parse_qs(p.query).get('id', [''])[0]
             # demo books belong to everyone; anything else only to its session
