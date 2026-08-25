@@ -4,72 +4,79 @@
 </p>
 
 <p align="center">
-  <a href="https://epub.starry-files.duckdns.org"><b>Try it online</b></a> ·
+  <a href="https://epub.starry-files.duckdns.org"><b>Live demo</b></a> ·
   <a href="./README.zh-CN.md">中文说明</a> ·
-  <a href="#install">Install</a> ·
-  <a href="#try-it-in-one-command">Try it</a> ·
-  <a href="#known-limits">Limits</a>
+  <a href="#installation">Installation</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#translation">Translation</a> ·
+  <a href="#limitations">Limitations</a>
 </p>
 
-Reading a book in a language you are still learning usually means choosing: the
-original, and looking things up constantly, or the translation, and not
-learning much. This makes a third thing — one EPUB where every paragraph is
-followed by its translation, blurred, until you tap it.
+<p align="center">
+  <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue">
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue">
+  <img alt="No required dependencies beyond lxml" src="https://img.shields.io/badge/dependencies-lxml-lightgrey">
+</p>
 
-It works on any standard EPUB, in any language pair. Nothing is uploaded
-anywhere; everything runs on your machine.
+Builds facing-text bilingual EPUBs. Each paragraph is followed by its
+translation, blurred until tapped, so the original can be read first and the
+translation consulted only when needed.
 
-## Try it without installing anything
+Works with any standard EPUB and any language pair. Chapter structure and
+paragraph pairing are derived from the files themselves — no per-book
+configuration. All processing is local.
 
-**[epub.starry-files.duckdns.org](https://epub.starry-files.duckdns.org)** runs
-this same code. Drag two EPUBs in and it hands back the merged book.
+- **merge** two monolingual editions into one bilingual book
+- **split** a bilingual book back into separate languages
+- **remerge** an existing bilingual book with different settings
+- **translate** the missing side via a model API, or via a coding agent
+- Command line, terminal wizard, and local web interface, in English or Chinese
 
-It is a small personal server, so treat it as a demo: uploads are capped at
-25 MB, jobs are rate limited per address, and everything you upload or produce
-is deleted automatically after 30 minutes. Nobody else can download what you
-made. For real work, or for anything you would rather not upload at all,
-install it and run it locally — that is what the rest of this page is about.
-
-## Try it in one command
-
-Two sample books ship with the repository, so there is nothing to find first:
-
-```bash
-bilingual-epub merge --a examples/sample-en.epub --b examples/sample-fr.epub --out demo.epub
-```
-
-Open `demo.epub` in Apple Books, or any EPUB 3 reader: English paragraph,
-French paragraph blurred underneath, tap to reveal, tap again to hide.
-
-The samples are an original short story written for this repository — not a
-real book, so there is no rights question. See [`examples/`](./examples/).
-
-## Install
+## Installation
 
 ```bash
 pip install bilingual-epub-toolkit
 ```
 
-For Chinese Traditional ↔ Simplified conversion, which needs opencc:
+Chinese Traditional ↔ Simplified conversion requires opencc:
 
 ```bash
 pip install "bilingual-epub-toolkit[chinese]"
 ```
 
+Requires Python 3.9 or later. The only runtime dependency is lxml.
+
 Three commands are installed:
 
-| Command | What it is |
+| Command | Interface |
 | --- | --- |
-| `bilingual-epub` | the CLI, with `merge` / `split` / `remerge` |
-| `bilingual-epub-tui` | a terminal wizard that asks instead of taking flags |
-| `bilingual-epub-web` | a local web page — drag books in, no paths to type |
+| `bilingual-epub` | command line |
+| `bilingual-epub-tui` | terminal wizard, prompts instead of flags |
+| `bilingual-epub-web` | local web page with drag-and-drop |
 
-All three speak English or Chinese, following your locale. Force it with
-`--lang en` or `--lang zh`.
+Interface language follows the system locale and can be set with `--lang en`
+or `--lang zh`.
 
-## The three operations
+## Quick start
 
-### merge — two monolingual books into one
+Two sample books ship with the repository:
+
+```bash
+bilingual-epub merge --a examples/sample-en.epub --b examples/sample-fr.epub --out demo.epub
+```
+
+Open `demo.epub` in Apple Books or any EPUB 3 reader. The samples are an
+original short story written for this project, so no third-party rights are
+involved. A hosted instance is available at
+[epub.starry-files.duckdns.org](https://epub.starry-files.duckdns.org) for
+trying the tool without installing it; uploads there are capped at 25 MB and
+deleted after 30 minutes.
+
+## Usage
+
+### merge
+
+Combine two monolingual editions:
 
 ```bash
 bilingual-epub merge \
@@ -77,174 +84,140 @@ bilingual-epub merge \
   --blur-side b --blur 0.25em
 ```
 
-Hiding a side is optional. For plain facing text with nothing blurred:
+| Option | Effect |
+| --- | --- |
+| `--blur-side a\|b` | which side is hidden until tapped (default `b`) |
+| `--no-blur` | plain facing text, nothing hidden |
+| `--blur` | CSS length; `em` units scale with the reader's font size |
+| `--title`, `--author` | override the combined metadata |
+| `--convert-side`, `--convert` | opencc script conversion, e.g. `--convert-side b --convert tw2sp` |
 
-```bash
-bilingual-epub merge --a english.epub --b french.epub --out plain.epub --no-blur
-```
+A per-chapter table is printed after each merge, reporting how many paragraphs
+paired one to one.
 
-Otherwise `--blur-side` takes `a` or `b`, and `--blur` is any CSS length; `em`
-is worth preferring because it scales with the reader's font size. Title and
-author default to a combination of both sources; `--title` and `--author`
-override.
+### split
 
-To convert Chinese script while merging:
-
-```bash
-bilingual-epub merge --a en.epub --b zh-hant.epub --out out.epub \
-  --convert-side b --convert tw2sp
-```
-
-### split — one bilingual book back into monolingual ones
+Separate a bilingual book by language:
 
 ```bash
 bilingual-epub split --in bilingual.epub --out-dir ./split/ --langs en,fr
 ```
 
-Which paragraph belongs to which language is read from each block's `lang`
-attribute. Without `--langs`, every language found is written out.
+Language is read from each block's `lang` attribute. Omitting `--langs` writes
+out every language found.
 
-### remerge — restyle a bilingual book you already have
+### remerge
+
+Re-render an existing bilingual book with different settings:
 
 ```bash
 bilingual-epub remerge --in old.epub --out new.epub --blur-side a --blur 0.35em
 ```
 
-Split then merge, in one step. Useful for changing the blur, flipping which
-side is hidden, or converting a bilingual book from elsewhere into this
-tap-to-reveal form.
+Equivalent to a split followed by a merge. Also converts bilingual books from
+other sources into this tap-to-reveal format.
 
-## How it works
+## Translation
 
-Two problems have to be solved: where the chapters are, and which paragraph
-matches which.
+When only one edition exists, the second can be generated. Both routes produce
+a translation with the same block count and order as the source, so the
+subsequent merge pairs every paragraph exactly.
 
-**Chapters** come from the EPUB itself — `META-INF/container.xml` to the OPF to
-the manifest and spine, the standard path. Chapter boundaries are found by
-scanning every heading level in the book and picking the one that recurs the
-way a chapter does, so no per-book table of internal filenames is needed.
+### With a coding agent
 
-**Alignment** is Gale–Church: a length-based statistical model solved by
-dynamic programming, with a bonus when headings coincide so section starts
-anchor the sequence. It handles the usual 1:1 case plus paragraphs that were
-split or merged in translation.
-
-Every block in the output carries a `lang` attribute, which is what lets
-`split` undo a `merge` exactly.
-
-The tap-to-reveal effect is CSS `:target` plus a small progressive-enhancement
-script, so it degrades to plain visible text in readers that allow neither.
-
-## Known limits
-
-- **DRM is not supported.** Encrypted EPUBs — most bought from commercial
-  stores — decompress into ciphertext. The tool reports that it found no text
-  and stops.
-- **Chapter detection needs headings.** A book that uses no `<h1>`–`<h6>` at
-  all degrades to a single chapter. Nothing is lost, but nothing is divided.
-- **Alignment is statistical, not semantic.** Paragraph length and heading
-  co-occurrence are heuristics. Editions that add, cut, or restructure text
-  will pair imperfectly; the per-chapter table printed after a merge reports
-  the 1:1 rate so you can judge the result yourself.
-- **`split` depends on per-paragraph `lang`.** Books this tool merged always
-  split cleanly. Bilingual books from elsewhere often do not tag language per
-  paragraph, in which case everything lands in one bucket and there is nothing
-  to separate.
-
-## Only have the book in one language?
-
-There is no second edition to merge against, so make one. Both routes produce a
-translation that is *structurally parallel* to the original — same blocks, same
-order — which is why the merge that follows comes out 100% one-to-one instead of
-the ~90% two independently published editions give you.
-
-### Let your own coding agent translate it
-
-This costs no API key at all: the agent translates on the subscription you are
-already paying for.
+Installs a skill that lets an agent such as Claude Code drive the toolkit,
+translating on an existing subscription rather than a metered API:
 
 ```bash
-bilingual-epub skill            # writes .claude/skills/bilingual-epub/SKILL.md
+bilingual-epub skill      # writes .claude/skills/bilingual-epub/SKILL.md
 ```
 
-Then ask your agent for a bilingual edition of the book. The skill tells it to
-export the text, translate it, and fold it back in. You can also grab the file
-from the [hosted instance](https://epub.starry-files.duckdns.org/skill).
+The skill file is also available from
+[the hosted instance](https://epub.starry-files.duckdns.org/skill).
 
-Under the hood it is three commands, usable by hand too:
+The underlying commands can be used directly:
 
 ```bash
 bilingual-epub export-text --in book.epub --out book.json
-# …translate book.json into translated.json…
+# translate book.json into translated.json
 bilingual-epub import-text --export book.json --text translated.json \
     --out book.zh.epub --lang zh
 ```
 
-The translation may be a JSON array of strings, a JSON object with a `blocks`
-list, or plain text one block per line. A file whose block count does not match
-is rejected rather than accepted — a translation one block short would shift
-every later paragraph against the wrong original.
+`import-text` accepts a JSON array of strings, a JSON object with a `blocks`
+list, or plain text with one block per line. Files whose block count differs
+from the source are rejected.
 
-### Or use an API key
-
-Bring your own endpoint; the bill lands on your account.
+### With a model API
 
 ```bash
 bilingual-epub translate --in book.epub --out book.zh.epub --to zh \
     --base-url https://api.deepseek.com/v1 --api-key "$KEY" --model deepseek-chat
 ```
 
-`--dialect openai` (the default) covers OpenAI, DeepSeek, Moonshot, Zhipu,
-SiliconFlow, OpenRouter, Groq, Together and any local server speaking
-`/chat/completions` — Ollama, LM Studio, vLLM. `--dialect anthropic` uses
-`/v1/messages`.
+| Option | Effect |
+| --- | --- |
+| `--dialect openai` | `/chat/completions`; OpenAI, DeepSeek, Moonshot, Zhipu, SiliconFlow, OpenRouter, Groq, Together, Ollama, LM Studio, vLLM (default) |
+| `--dialect anthropic` | `/v1/messages` |
+| `--dry-run` | report block, character and request counts without sending anything |
+| `--batch-size` | paragraphs per request (default 20) |
+| `--cache` | progress file; an interrupted run resumes from it |
 
-- `--dry-run` reports blocks, characters and request count without spending
-  anything
-- progress is cached next to the output, so an interrupted run resumes instead
-  of paying twice
-- a batch that comes back the wrong length is retried, then halved, then done
-  one block at a time — never silently accepted
-- keys also read from `BILINGUAL_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+Credentials may also be supplied through `BILINGUAL_API_KEY`, `OPENAI_API_KEY`
+or `ANTHROPIC_API_KEY`. Batches returning the wrong number of blocks are
+retried, then subdivided, and are never accepted as-is.
 
-## Running it on a server
+## Self-hosting
 
-The local web UI assumes one trusted user on their own machine. `--public`
-switches those assumptions for a host other people can reach:
+The web interface defaults to a single trusted user on localhost. `--public`
+adapts it for a shared host:
 
 ```bash
 bilingual-epub-web --public --port 8799
 ```
 
-That refuses server-side paths (locally the path field opens anything you
-could open yourself; on a public host that is an arbitrary-file-read hole),
-gives every visitor an isolated scratch directory so nobody can download
-anybody else's books, rate-limits per address, caps uploads at 25 MB, and
-deletes idle sessions after 30 minutes (`--ttl`).
+Public mode rejects server-side file paths, isolates each visitor's files,
+rate-limits by address, caps uploads at 25 MB, and removes idle sessions after
+30 minutes (`--ttl`).
 
-### Keeping bots out without shutting people out
-
-Cookies and rate limits alone do not stop a determined bot: rotating addresses
-defeats the bucket, and a headless browser collects a cookie as readily as a
-person does. Turnstile is what actually raises that cost, and unlike a password
-it costs a visitor nothing — the service stays open to everyone.
+Cloudflare Turnstile can be enabled to filter automated traffic while keeping
+the service open to anyone:
 
 ```bash
-export TURNSTILE_SITEKEY=0x...      # from the Cloudflare dashboard, Turnstile
+export TURNSTILE_SITEKEY=0x...
 export TURNSTILE_SECRET=0x...
 bilingual-epub-web --public
 ```
 
-Every job is then verified with Cloudflare before it runs. Verification fails
-closed: if Cloudflare cannot be reached the job is refused rather than quietly
-let through. With no keys set, the widget is not rendered and nothing is
-checked, which is what you want locally.
+Jobs are then verified before running, and refused if Cloudflare is
+unreachable. Without keys, no widget is rendered and no verification occurs.
 
-## Bring your own books
+## How it works
 
-This repository contains no real books, and `*.epub` is gitignored apart from
-the generated samples. The tool reads files you already have; obtaining them is
-your business.
+Chapter boundaries are located by reading the EPUB container, OPF, manifest and
+spine, then selecting the heading level that recurs at chapter frequency.
+
+Paragraph pairing uses Gale–Church alignment: a length-based statistical model
+solved by dynamic programming, weighted so that co-occurring headings anchor
+the sequence. It handles one-to-one pairs as well as paragraphs split or merged
+in translation.
+
+Every output block carries a `lang` attribute, which is what allows `split` to
+reverse a `merge`. The tap-to-reveal behaviour uses CSS `:target` with a small
+progressive-enhancement script, degrading to plain visible text where neither
+is supported.
+
+## Limitations
+
+| Limitation | Behaviour |
+| --- | --- |
+| DRM-protected files | Encrypted EPUBs yield no extractable text; the tool reports this and stops. |
+| Books without headings | Degrade to a single chapter. Text is preserved; chapter divisions are not. |
+| Statistical alignment | Editions that add, cut or restructure text pair imperfectly. The printed table reports the rate. |
+| Untagged bilingual books | `split` requires per-paragraph `lang` attributes. Books lacking them cannot be separated. |
+
+No EPUB files are included in this repository apart from the generated samples,
+and `*.epub` is gitignored.
 
 ## Development
 
@@ -255,10 +228,11 @@ pip install -e ".[dev,chinese]"
 pytest && ruff check .
 ```
 
-Tests build synthetic EPUBs in code rather than checking book files into the
-repository — see [`tests/conftest.py`](./tests/conftest.py). They cover merge,
-split, and remerge end to end, both cover image formats, the option surface,
-and the error cases.
+Test fixtures are synthetic EPUBs constructed in code rather than checked-in
+book files; see [`tests/conftest.py`](./tests/conftest.py). Coverage includes
+the three operations end to end, both cover image formats, the translation
+round trip against a stub API, public-mode isolation and rate limiting, and
+the error paths.
 
 ## License
 
