@@ -72,6 +72,11 @@ involved. A hosted instance is available at
 trying the tool without installing it; uploads there are capped at 25 MB and
 deleted after 30 minutes.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/screenshot.png" width="100%"
+       alt="The local web interface: two EPUBs dropped in on the left, the merged bilingual result previewed on the right">
+</p>
+
 ## Usage
 
 ### merge

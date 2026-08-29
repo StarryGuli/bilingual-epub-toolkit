@@ -66,6 +66,11 @@ bilingual-epub merge --a examples/sample-en.epub --b examples/sample-fr.epub --o
 [epub.starry-files.duckdns.org](https://epub.starry-files.duckdns.org)；
 那台上传上限 25 MB，文件 30 分钟后自动删除。
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/screenshot.png" width="100%"
+       alt="本地网页界面：左边拖入两本 EPUB，右边实时预览合并结果">
+</p>
+
 ## 用法
 
 ### merge
