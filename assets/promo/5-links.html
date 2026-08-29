@@ -1,0 +1,90 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1440px}
+body{background:#f7f2ea;color:#231f1a;
+ font:400 16px/1.6 "PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;
+ -webkit-font-smoothing:antialiased;position:relative;overflow:hidden;
+ padding:74px 64px;display:flex;flex-direction:column}
+body::before{content:"";position:absolute;inset:0;
+ background-image:radial-gradient(rgba(138,90,43,.13) 1.5px,transparent 1.5px);
+ background-size:26px 26px;opacity:.55}
+body::after{content:"";position:absolute;inset:0;pointer-events:none;
+ background:radial-gradient(900px 620px at 88% -10%,rgba(212,150,80,.20),transparent 60%),
+            radial-gradient(760px 620px at -14% 106%,rgba(138,90,43,.13),transparent 60%)}
+.z{position:relative;z-index:2}
+.win{background:#fff;border-radius:18px;overflow:hidden;
+ box-shadow:0 3px 6px rgba(35,32,28,.07),0 28px 64px rgba(35,32,28,.17);
+ border:1px solid #e3dbd0}
+.win-bar{height:46px;background:#efe8de;display:flex;align-items:center;
+ padding:0 18px;gap:9px;border-bottom:1px solid #e3dbd0}
+.dot{width:13px;height:13px;border-radius:50%}
+.win-url{margin-left:14px;flex:1;height:26px;border-radius:8px;background:#fbf8f4;
+ border:1px solid #e6ded3;font:500 15px/26px "SF Mono",Menlo,monospace;
+ color:#8a7a68;padding:0 12px;overflow:hidden;white-space:nowrap}
+.win img{display:block;width:100%}
+.sticker{position:absolute;z-index:5;background:#8a5a2b;color:#fff;
+ font-size:25px;font-weight:700;padding:14px 26px;border-radius:14px;
+ box-shadow:0 8px 22px rgba(138,90,43,.34);letter-spacing:.02em}
+.sticker.g{background:#2f6b45;box-shadow:0 8px 22px rgba(47,107,69,.3)}
+.sticker.w{background:#fff;color:#8a5a2b;border:2px solid #8a5a2b;
+ box-shadow:0 8px 20px rgba(35,32,28,.12)}
+.num{width:52px;height:52px;border-radius:50%;background:#8a5a2b;color:#fff;
+ font:700 27px/52px "PingFang SC",sans-serif;text-align:center;flex:none;
+ box-shadow:0 5px 14px rgba(138,90,43,.32)}
+.note{position:absolute;z-index:6;background:#fff8e9;border:1.5px solid #e8d5ae;
+ border-radius:12px;padding:14px 20px;font-size:23px;font-weight:600;color:#7a5a1e;
+ box-shadow:0 8px 20px rgba(35,32,28,.13);max-width:340px;line-height:1.45}
+.hl{background:linear-gradient(transparent 56%,rgba(212,150,80,.55) 56%);padding:0 3px}
+h1{font-size:80px;line-height:1.16;font-weight:800;letter-spacing:-.025em}
+h2{font-size:58px;line-height:1.24;font-weight:800;letter-spacing:-.02em}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;background:#8a5a2b;color:#fff;
+ font-size:22px;font-weight:700;letter-spacing:.1em;padding:9px 20px;border-radius:999px}
+.sub{font-size:26px;line-height:1.7;color:#5f574c}
+.grow{flex:1}
+.mark{display:flex;align-items:center;gap:12px;font-size:24px;color:#6b6156;font-weight:600}
+.mark b{font-family:Georgia,"Songti SC",serif;font-size:30px;color:#8a5a2b;font-weight:400}
+.chip{display:inline-block;padding:10px 22px;border-radius:999px;background:#fff;
+ border:1.5px solid #e0d5c6;color:#6b5a45;font-size:22px;font-weight:600}
+.term{background:#2a2621;border-radius:16px;padding:26px 30px;
+ box-shadow:0 4px 8px rgba(35,32,28,.14),0 20px 42px rgba(35,32,28,.2);
+ position:relative;z-index:2}
+.term-bar{display:flex;gap:8px;margin-bottom:20px}
+.term-bar span{width:12px;height:12px;border-radius:50%}
+.term p{font:500 21px/1.8 "SF Mono",Menlo,monospace;color:#e6ddd0;white-space:nowrap}
+.term .c{color:#7fc79b}
+.term .d{color:#9b9186}
+
+.card{background:#fff;border:2px solid #8a5a2b;border-radius:22px;padding:32px 34px;
+ box-shadow:0 4px 8px rgba(35,32,28,.06),0 20px 44px rgba(35,32,28,.12);position:relative}
+.card+.card{margin-top:26px}
+.card .l{font-size:22px;font-weight:700;color:#8a5a2b;margin-bottom:14px;letter-spacing:.05em}
+.card .u{font:700 37px/1.45 "SF Mono",Menlo,monospace;color:#231f1a;word-break:break-all}
+.card.alt{border-color:#e3dbd0}
+.card.alt .l{color:#6b6156}
+.chips{display:flex;gap:13px;flex-wrap:wrap;margin-top:34px}
+.inst{margin-top:32px}
+.inst .l2{font-size:19px;color:#9b9186;margin-bottom:14px;font-weight:600;letter-spacing:.06em}
+.inst p{font:600 21px/1.62 "SF Mono",Menlo,monospace;color:#e6ddd0}
+.inst .c{color:#7fc79b}
+</style></head><body>
+<div class="z"><span class="eyebrow">拿去用</span></div>
+<h2 class="z" style="margin-top:24px">开源，免费<br><span class="hl">代码全部公开</span></h2>
+<div class="z" style="margin-top:40px;position:relative">
+  <div class="card"><div class="l">★ GITHUB · 点个 star 呗</div>
+    <div class="u">github.com/StarryGuli/<br>bilingual-epub-toolkit</div></div>
+  <div class="card alt"><div class="l">不想装？直接在线做（文件 30 分钟自动删）</div>
+    <div class="u">epub.starry-files<br>.duckdns.org</div></div>
+  <div class="sticker g" style="top:-24px;right:-16px;transform:rotate(7deg)">全部免费</div>
+</div>
+<div class="chips z">
+  <span class="chip">Apache-2.0</span><span class="chip">Python 3.9+</span>
+  <span class="chip">中英双语</span><span class="chip">无需注册</span>
+</div>
+<div class="term inst z">
+  <div class="l2">装到本地</div>
+  <p><span class="c">$</span> pip install git+https://github.com/<br>&nbsp;&nbsp;&nbsp;StarryGuli/bilingual-epub-toolkit</p>
+</div>
+<div class="grow"></div>
+<p class="sub z" style="margin-bottom:22px">装到本地跑的时候，书不离开你的电脑。</p>
+<div class="mark z"><b>A | 文</b> Bilingual EPUB Toolkit</div>
+</body></html>

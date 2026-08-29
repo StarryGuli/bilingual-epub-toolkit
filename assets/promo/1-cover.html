@@ -1,0 +1,75 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1440px}
+body{background:#f7f2ea;color:#231f1a;
+ font:400 16px/1.6 "PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;
+ -webkit-font-smoothing:antialiased;position:relative;overflow:hidden;
+ padding:74px 64px;display:flex;flex-direction:column}
+body::before{content:"";position:absolute;inset:0;
+ background-image:radial-gradient(rgba(138,90,43,.13) 1.5px,transparent 1.5px);
+ background-size:26px 26px;opacity:.55}
+body::after{content:"";position:absolute;inset:0;pointer-events:none;
+ background:radial-gradient(900px 620px at 88% -10%,rgba(212,150,80,.20),transparent 60%),
+            radial-gradient(760px 620px at -14% 106%,rgba(138,90,43,.13),transparent 60%)}
+.z{position:relative;z-index:2}
+.win{background:#fff;border-radius:18px;overflow:hidden;
+ box-shadow:0 3px 6px rgba(35,32,28,.07),0 28px 64px rgba(35,32,28,.17);
+ border:1px solid #e3dbd0}
+.win-bar{height:46px;background:#efe8de;display:flex;align-items:center;
+ padding:0 18px;gap:9px;border-bottom:1px solid #e3dbd0}
+.dot{width:13px;height:13px;border-radius:50%}
+.win-url{margin-left:14px;flex:1;height:26px;border-radius:8px;background:#fbf8f4;
+ border:1px solid #e6ded3;font:500 15px/26px "SF Mono",Menlo,monospace;
+ color:#8a7a68;padding:0 12px;overflow:hidden;white-space:nowrap}
+.win img{display:block;width:100%}
+.sticker{position:absolute;z-index:5;background:#8a5a2b;color:#fff;
+ font-size:25px;font-weight:700;padding:14px 26px;border-radius:14px;
+ box-shadow:0 8px 22px rgba(138,90,43,.34);letter-spacing:.02em}
+.sticker.g{background:#2f6b45;box-shadow:0 8px 22px rgba(47,107,69,.3)}
+.sticker.w{background:#fff;color:#8a5a2b;border:2px solid #8a5a2b;
+ box-shadow:0 8px 20px rgba(35,32,28,.12)}
+.num{width:52px;height:52px;border-radius:50%;background:#8a5a2b;color:#fff;
+ font:700 27px/52px "PingFang SC",sans-serif;text-align:center;flex:none;
+ box-shadow:0 5px 14px rgba(138,90,43,.32)}
+.note{position:absolute;z-index:6;background:#fff8e9;border:1.5px solid #e8d5ae;
+ border-radius:12px;padding:14px 20px;font-size:23px;font-weight:600;color:#7a5a1e;
+ box-shadow:0 8px 20px rgba(35,32,28,.13);max-width:340px;line-height:1.45}
+.hl{background:linear-gradient(transparent 56%,rgba(212,150,80,.55) 56%);padding:0 3px}
+h1{font-size:80px;line-height:1.16;font-weight:800;letter-spacing:-.025em}
+h2{font-size:58px;line-height:1.24;font-weight:800;letter-spacing:-.02em}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;background:#8a5a2b;color:#fff;
+ font-size:22px;font-weight:700;letter-spacing:.1em;padding:9px 20px;border-radius:999px}
+.sub{font-size:26px;line-height:1.7;color:#5f574c}
+.grow{flex:1}
+.mark{display:flex;align-items:center;gap:12px;font-size:24px;color:#6b6156;font-weight:600}
+.mark b{font-family:Georgia,"Songti SC",serif;font-size:30px;color:#8a5a2b;font-weight:400}
+.chip{display:inline-block;padding:10px 22px;border-radius:999px;background:#fff;
+ border:1.5px solid #e0d5c6;color:#6b5a45;font-size:22px;font-weight:600}
+.term{background:#2a2621;border-radius:16px;padding:26px 30px;
+ box-shadow:0 4px 8px rgba(35,32,28,.14),0 20px 42px rgba(35,32,28,.2);
+ position:relative;z-index:2}
+.term-bar{display:flex;gap:8px;margin-bottom:20px}
+.term-bar span{width:12px;height:12px;border-radius:50%}
+.term p{font:500 21px/1.8 "SF Mono",Menlo,monospace;color:#e6ddd0;white-space:nowrap}
+.term .c{color:#7fc79b}
+.term .d{color:#9b9186}
+
+.hero{position:relative;margin-top:26px}
+.win{transform:rotate(-1.6deg);width:84%;margin-left:auto}
+h1{margin-top:46px}
+</style></head><body>
+<div class="z"><span class="eyebrow">开源 · 免费 · 自己做</span></div>
+<div class="hero z">
+  <div class="win">
+    <div class="win-bar"><span class="dot" style="background:#e06c5f"></span><span class="dot" style="background:#e5b34b"></span><span class="dot" style="background:#5fb865"></span><div class="win-url">epub.starry-files.duckdns.org</div></div>
+    <img src="shot-flow.png">
+  </div>
+  <div class="sticker" style="top:-26px;right:-16px;transform:rotate(6deg)">两本 → 一本</div>
+  <div class="note" style="left:-30px;bottom:196px;transform:rotate(-4deg);max-width:214px;
+       font-size:21px;padding:12px 16px">这行糊住了<br>点一下才显示 →</div>
+</div>
+<h1 class="z">把两本书<br><span class="hl">合成一本对照书</span></h1>
+<p class="sub z" style="margin-top:22px">同一本书的英文版 + 中文版，合出一本 EPUB。<br>一段原文一段译文，译文默认糊着。</p>
+<div class="grow"></div>
+<div class="mark z"><b>A | 文</b> Bilingual EPUB Toolkit</div>
+</body></html>

@@ -1,0 +1,71 @@
+# Publish to PyPI on a version tag, using Trusted Publishing.
+#
+# No API token is stored anywhere: PyPI verifies the workflow's OIDC identity
+# against a publisher you register once on pypi.org. There is no secret to
+# leak, rotate, or accidentally paste somewhere.
+#
+# One-time setup, on https://pypi.org/manage/account/publishing/ :
+#   PyPI project name  bilingual-epub-toolkit
+#   Owner              StarryGuli
+#   Repository         bilingual-epub-toolkit
+#   Workflow           release.yml
+#   Environment        pypi
+#
+# Then release with:
+#   git tag v0.1.0 && git push origin v0.1.0
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+      - name: Verify the tag matches the packaged version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "tag=$TAG packaged=$VER"
+          test "$TAG" = "$VER" || { echo "::error::tag $TAG does not match version $VER"; exit 1; }
+        if: startsWith(github.ref, 'refs/tags/')
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e ".[dev,chinese]"
+      - run: pytest -q
+      - run: ruff check .
+
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # this is what lets PyPI trust the workflow
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
