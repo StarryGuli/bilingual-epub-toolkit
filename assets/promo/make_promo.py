@@ -258,7 +258,7 @@ h1{margin-top:46px}
 </div>
 <div class="term inst z">
   <div class="l2">装到本地</div>
-  <p><span class="c">$</span> pip install git+https://github.com/<br>&nbsp;&nbsp;&nbsp;StarryGuli/bilingual-epub-toolkit</p>
+  <p><span class="c">$</span> pip install bilingual-epub-toolkit</p>
 </div>
 <div class="grow"></div>
 <p class="sub z" style="margin-bottom:22px">装到本地跑的时候，书不离开你的电脑。</p>

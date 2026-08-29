@@ -13,6 +13,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/bilingual-epub-toolkit/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/bilingual-epub-toolkit"></a>
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue">
   <img alt="No required dependencies beyond lxml" src="https://img.shields.io/badge/dependencies-lxml-lightgrey">
