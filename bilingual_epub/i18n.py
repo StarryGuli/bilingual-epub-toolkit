@@ -399,6 +399,22 @@ STRINGS = {
     'web.cf_down':       ('Cannot reach the verification service right now. '
                           'Try again in a moment.',
                           '暂时连不上验证服务，过一会儿再试。'),
+    'web.js.too_big':    ('%s is %s MB. This server accepts files up to %s MB each; '
+                          'install the toolkit locally and there is no limit.',
+                          '%s 有 %s MB，这台服务器单个文件上限 %s MB。'
+                          '装到本地跑就没有这个限制。'),
+    'web.js.rejected':   ('The server rejected the upload (HTTP %s). The files are '
+                          'probably too large for it.',
+                          '服务器拒绝了这次上传（HTTP %s），多半是文件太大。'),
+    'web.js.gateway':    ('The server did not answer in time (HTTP %s). A very long '
+                          'book can take longer than the gateway allows — try again, '
+                          'or run it locally.',
+                          '服务器没能及时返回（HTTP %s）。特别长的书可能超过网关等待'
+                          '时间，可以重试，或者装到本地跑。'),
+    'web.js.dropped':    ('The connection dropped before the result came back. On a '
+                          'phone network this usually means the upload was '
+                          'interrupted.',
+                          '结果还没回来连接就断了。手机网络下通常是上传被中断了。'),
     'web.public_note':   ('Uploads are deleted automatically after a while, and only '
                           'you can download what you made.',
                           '上传的文件过一阵会自动删除；你做出来的东西也只有你能下载。'),

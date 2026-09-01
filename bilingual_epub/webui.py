@@ -22,7 +22,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import guard, samples
+from . import diagnostics, guard, samples
 from . import merge as merge_mod
 from . import split as split_mod
 from .i18n import get_lang, set_lang, t
@@ -483,7 +483,38 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
   out.innerHTML = '';
 
   try {
+    // Check the size here rather than discovering it after a long mobile
+    // upload: the gateway rejects an oversized body mid-transfer, which the
+    // browser reports as a failed fetch rather than as "too large".
+    const tooBig = [...form.querySelectorAll('input[type=file]')]
+      .map(i => i.files[0]).filter(Boolean)
+      .find(f => f.size > L.maxUpload * 1048576);
+    if (tooBig) {
+      out.innerHTML = '<div class="card bad"><h3>' + esc(L.failed) + '</h3><p>' +
+        esc(L.tooBigJs.replace('%s', tooBig.name)
+                      .replace('%s', (tooBig.size / 1048576).toFixed(1))
+                      .replace('%s', L.maxUpload)) + '</p></div>';
+      return;
+    }
+
     const res = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+
+    // Never assume the body is JSON. A gateway that refuses the request --
+    // 413 for an oversized upload, 502/504 when the backend is slow -- answers
+    // with its own HTML page, and parsing that produced the unreadable
+    // "invalid HTML" error people were actually seeing.
+    const ctype = res.headers.get('content-type') || '';
+    if (!ctype.includes('application/json')) {
+      let msg;
+      if (res.status === 413) msg = L.rejectedJs.replace('%s', res.status);
+      else if (res.status === 502 || res.status === 503 || res.status === 504)
+        msg = L.gatewayJs.replace('%s', res.status);
+      else msg = L.rejectedJs.replace('%s', res.status);
+      out.innerHTML = '<div class="card bad"><h3>' + esc(L.failed) + '</h3><p>' +
+        esc(msg) + '</p></div>';
+      return;
+    }
+
     const data = await res.json();
     if (data.ok) {
       const links = (data.files || []).map(f =>
@@ -499,8 +530,9 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
         esc(data.error) + '</pre></div>';
     }
   } catch (err) {
-    out.innerHTML = '<div class="card bad"><h3>' + esc(L.reqFailed) + '</h3><pre>' +
-      esc(err) + '</pre></div>';
+    const dropped = (err instanceof TypeError);   // fetch's network failure
+    out.innerHTML = '<div class="card bad"><h3>' + esc(L.reqFailed) + '</h3><p>' +
+      esc(dropped ? L.droppedJs : String(err)) + '</p></div>';
   } finally {
     btn.disabled = false; btn.classList.remove('busy');
     // a Turnstile token is single-use: without resetting, a second submit
@@ -526,7 +558,7 @@ class Config:
         self.turnstile = turnstile or guard.Turnstile()
         # a public host processes strangers' files on someone else's disk, so
         # the ceiling is much lower than what a local user should be allowed
-        self.max_upload = max_upload or (25 * 1024 * 1024 if public
+        self.max_upload = max_upload or (40 * 1024 * 1024 if public
                                          else 200 * 1024 * 1024)
         self.ttl = ttl
         # reading an arbitrary server path is the whole point locally and an
@@ -832,6 +864,10 @@ def render_page(cfg=None, page_token=''):
         'aOnly': t('web.res.a_only'), 'bOnly': t('web.res.b_only'),
         'failed': t('web.res.failed'), 'reqFailed': t('web.res.reqfail'),
         'uploaded': t('web.uploaded'),
+        # the browser needs the ceiling so it can refuse before uploading
+        'maxUpload': cfg.max_upload // 1048576,
+        'tooBigJs': t('web.js.too_big'), 'rejectedJs': t('web.js.rejected'),
+        'gatewayJs': t('web.js.gateway'), 'droppedJs': t('web.js.dropped'),
     }, ensure_ascii=False)
     return (PAGE
             .replace('__CSS__', CSS)
@@ -956,6 +992,7 @@ class Handler(BaseHTTPRequestHandler):
             dest = os.path.join(slot, safe)
             with open(dest, 'wb') as f:
                 f.write(blob)
+            self._inputs.append(dest)
             return dest
         typed = (fields.get(path_key) or '').strip()
         if typed:
@@ -965,6 +1002,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise SystemExit(t('web.no_paths'))
             if not os.path.exists(typed):
                 raise SystemExit(t('web.no_such', label, typed))
+            self._inputs.append(typed)
             return typed
         raise SystemExit(t('web.need_file', label))
 
@@ -973,6 +1011,12 @@ class Handler(BaseHTTPRequestHandler):
         return os.path.join(sess['dir'] if sess else self.server.outputs, stem)
 
     # ---- GET ------------------------------------------------------------ #
+    def _log_failure(self, route, error):
+        path = getattr(self.server, 'error_log', None)
+        if path:
+            diagnostics.record(path, route, error, self._inputs,
+                               {'public': self.server.cfg.public})
+
     def _sid(self):
         raw = self.headers.get('Cookie', '')
         for part in raw.split(';'):
@@ -1030,6 +1074,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         cfg = self.server.cfg
+        self._inputs = []
         sess = self.server.sessions.get(self._sid())
         if sess is None:
             # every POST has to come from a page this server handed out
@@ -1080,11 +1125,13 @@ class Handler(BaseHTTPRequestHandler):
             except SystemExit as e:
                 # these carry a message written for a person to read
                 payload = {'ok': False, 'error': str(e)}
-            except Exception:
+                self._log_failure(route, e)
+            except Exception as e:
                 # an unexpected failure: log it here, but do not ship the
                 # traceback to the browser -- it carries absolute server paths
                 traceback.print_exc(file=sys.stderr)
                 payload = {'ok': False, 'error': t('web.crashed')}
+                self._log_failure(route, e)
             finally:
                 sys.stdout = real_stdout
         self._json(payload)
@@ -1151,6 +1198,9 @@ def main():
                          'isolate visitors, rate-limit, and expire uploads')
     ap.add_argument('--host', default=None,
                     help='bind address (default 127.0.0.1, or 0.0.0.0 with --public)')
+    ap.add_argument('--error-log', default=None, metavar='PATH',
+                    help='append a JSON line describing each failed job '
+                         '(structure and traceback only, never book text)')
     ap.add_argument('--ttl', type=float, default=1800.0,
                     help='seconds an idle session keeps its files (default 1800)')
     ap.add_argument('--turnstile-sitekey', default=None,
@@ -1188,6 +1238,7 @@ def main():
     os.makedirs(srv.uploads)
     os.makedirs(srv.outputs)
     srv.cfg = cfg
+    srv.error_log = args.error_log
     srv.offered = build_demo(workdir)
     srv.sessions = guard.Sessions(os.path.join(workdir, 'sessions'), ttl=args.ttl)
     srv.limiter = guard.RateLimit()
@@ -1201,6 +1252,9 @@ def main():
     print(t('web.open_hint'))
     print(t('web.stop_hint'))
 
+    if args.error_log:
+        print('  failures logged to %s (file structure only, no book text)'
+              % args.error_log)
     if args.public:
         print('  public mode: server-side paths refused, one scratch area per '
               'visitor, rate limited, uploads expire after %d min.'
