@@ -415,6 +415,29 @@ STRINGS = {
                           'phone network this usually means the upload was '
                           'interrupted.',
                           '结果还没回来连接就断了。手机网络下通常是上传被中断了。'),
+    'web.report.btn':    ('Report this failure', '报告这个问题'),
+    'web.report.head':   ('Send this to the maintainer?', '把这次失败发给作者？'),
+    'web.report.what':   ('What gets sent either way: the error, and the shape of '
+                          'your files — how many entries, which parts are present, '
+                          'file sizes. Never any text from the book.',
+                          '无论选哪种都会发送：报错本身，以及文件的结构——有多少个'
+                          '条目、缺了哪些部分、文件多大。不含书里的任何文字。'),
+    'web.report.attach': ('Also send the book itself', '连这本书一起发过去'),
+    'web.report.why':    ('Some failures cannot be reproduced without the actual '
+                          'file. It is kept only to fix this bug and deleted '
+                          'afterwards. Leave this off if the book is private.',
+                          '有些问题不拿到原文件就复现不了。文件只用于修这个 bug，'
+                          '修完即删。书不方便外传就别勾。'),
+    'web.report.note':   ('Anything you want to add (optional)', '想补充点什么（可选）'),
+    'web.report.send':   ('Send report', '发送'),
+    'web.report.cancel': ('Cancel', '取消'),
+    'web.report.ok':     ('Sent. Reference %s — quote it if you follow up.',
+                          '已发送，编号 %s。之后要问进展报这个号。'),
+    'web.report.nofiles': ('The files from that attempt have already been cleared, '
+                           'so only the error description was sent.',
+                           '那次上传的文件已经被清理了，所以只发送了报错描述。'),
+    'web.report.gone':   ('That failure is no longer on record — reload and try the '
+                          'merge again.', '这次失败的记录已经不在了，刷新页面重试一次。'),
     'web.public_note':   ('Uploads are deleted automatically after a while, and only '
                           'you can download what you made.',
                           '上传的文件过一阵会自动删除；你做出来的东西也只有你能下载。'),

@@ -327,6 +327,40 @@ pre { margin: .6rem 0 0; padding: .8rem; overflow-x: auto;
       border-radius: 8px; font-size: .78rem; line-height: 1.5;
       white-space: pre-wrap; word-break: break-word; }
 
+.report-open {
+  appearance: none; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink-soft); cursor: pointer; margin-top: .8rem;
+  padding: .45rem .9rem; border-radius: 8px; font: inherit; font-size: .82rem;
+  transition: border-color .16s ease, color .16s ease;
+}
+.report-open:hover { border-color: var(--accent); color: var(--accent); }
+.report-box {
+  margin-top: .9rem; padding: .95rem 1rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  animation: rise .24s ease both;
+}
+.report-box h4 { margin: 0 0 .5rem; font-size: .9rem; }
+.report-box p { margin: 0 0 .6rem; font-size: .8rem; line-height: 1.6; color: var(--ink-soft); }
+.report-box label.opt {
+  display: flex; gap: .5rem; align-items: flex-start; margin: .7rem 0 .3rem;
+  font-size: .84rem; font-weight: 600; cursor: pointer;
+}
+.report-box label.opt input { margin-top: .2rem; flex: none; }
+.report-box textarea {
+  width: 100%; min-height: 3.4rem; margin-top: .5rem; padding: .5rem .6rem;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 7px; font: inherit; font-size: .84rem;
+  resize: vertical;
+}
+.report-box .acts { display: flex; gap: .5rem; margin-top: .7rem; }
+.report-box button {
+  appearance: none; cursor: pointer; padding: .5rem 1rem; border-radius: 7px;
+  font: inherit; font-size: .84rem; font-weight: 600; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink-soft);
+}
+.report-box button.send { background: var(--accent); border-color: var(--accent); color: #fff; }
+.report-done { margin-top: .8rem; font-size: .84rem; color: var(--ok); font-weight: 600; }
+
 .dl { display: inline-flex; align-items: center; gap: .4rem;
       margin: .6rem .4rem 0 0; padding: .55rem 1.1rem;
       background: var(--ok); color: #fff; border-radius: 8px;
@@ -475,6 +509,69 @@ function statsTable(rows) {
 const esc = s => String(s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* ---- reporting a failure ---- */
+/* The panel spells out what leaves the machine before anything does, and the
+   book itself is a separate, unticked choice -- someone should be able to help
+   fix a parser bug without handing over what they are reading. */
+function reportUI() {
+  if (!L.canReport) return '';
+  return '<button type="button" class="report-open">' + esc(L.reportBtn) + '</button>';
+}
+
+document.addEventListener('click', async e => {
+  const open = e.target.closest('.report-open');
+  if (open) {
+    open.outerHTML =
+      '<div class="report-box">' +
+        '<h4>' + esc(L.reportHead) + '</h4>' +
+        '<p>' + esc(L.reportWhat) + '</p>' +
+        '<label class="opt"><input type="checkbox" class="rp-attach">' +
+          '<span>' + esc(L.reportAttach) + '</span></label>' +
+        '<p>' + esc(L.reportWhy) + '</p>' +
+        '<textarea class="rp-note" placeholder="' + esc(L.reportNote) + '"></textarea>' +
+        '<div class="acts">' +
+          '<button type="button" class="send rp-send">' + esc(L.reportSend) + '</button>' +
+          '<button type="button" class="rp-cancel">' + esc(L.reportCancel) + '</button>' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  if (e.target.closest('.rp-cancel')) {
+    const box = e.target.closest('.report-box');
+    box.outerHTML = '<button type="button" class="report-open">' +
+                    esc(L.reportBtn) + '</button>';
+    return;
+  }
+
+  const send = e.target.closest('.rp-send');
+  if (!send) return;
+  const box = send.closest('.report-box');
+  send.disabled = true;
+  try {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        page_token: L.pageToken,
+        attach: $('.rp-attach', box).checked,
+        note: $('.rp-note', box).value,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      let msg = L.reportOk.replace('%s', data.id);
+      if (data.wanted_attach && !data.attached) msg += ' ' + L.reportNoFiles;
+      box.outerHTML = '<p class="report-done">✓ ' + esc(msg) + '</p>';
+    } else {
+      box.outerHTML = '<p class="report-done" style="color:var(--err)">' +
+                      esc(data.error) + '</p>';
+    }
+  } catch (err) {
+    send.disabled = false;
+  }
+});
+
 $$('form').forEach(form => form.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('.go', form);
@@ -527,7 +624,7 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
         links + '</div>';
     } else {
       out.innerHTML = '<div class="card bad"><h3>' + esc(L.failed) + '</h3><pre>' +
-        esc(data.error) + '</pre></div>';
+        esc(data.error) + '</pre>' + reportUI() + '</div>';
     }
   } catch (err) {
     const dropped = (err instanceof TypeError);   // fetch's network failure
@@ -855,7 +952,7 @@ PAGE = (
     '<script>__JS__</script></body></html>')
 
 
-def render_page(cfg=None, page_token=''):
+def render_page(cfg=None, page_token='', reports_on=False):
     """Render the whole page in the currently selected language."""
     cfg = cfg or Config()
     lang = get_lang()
@@ -866,6 +963,13 @@ def render_page(cfg=None, page_token=''):
         'uploaded': t('web.uploaded'),
         # the browser needs the ceiling so it can refuse before uploading
         'maxUpload': cfg.max_upload // 1048576,
+        'canReport': bool(reports_on),
+        'reportBtn': t('web.report.btn'), 'reportHead': t('web.report.head'),
+        'reportWhat': t('web.report.what'), 'reportAttach': t('web.report.attach'),
+        'reportWhy': t('web.report.why'), 'reportNote': t('web.report.note'),
+        'reportSend': t('web.report.send'), 'reportCancel': t('web.report.cancel'),
+        'reportOk': t('web.report.ok'), 'reportNoFiles': t('web.report.nofiles'),
+        'pageToken': page_token,
         'tooBigJs': t('web.js.too_big'), 'rejectedJs': t('web.js.rejected'),
         'gatewayJs': t('web.js.gateway'), 'droppedJs': t('web.js.dropped'),
     }, ensure_ascii=False)
@@ -1012,10 +1116,66 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- GET ------------------------------------------------------------ #
     def _log_failure(self, route, error):
+        report = {
+            'endpoint': route,
+            'error_type': type(error).__name__,
+            'error': diagnostics.scrub(str(error))[:800],
+            'inputs': [diagnostics.fingerprint(p) for p in self._inputs],
+            'public': self.server.cfg.public,
+        }
+        if not isinstance(error, SystemExit):
+            report['traceback'] = diagnostics.scrub(traceback.format_exc())[-3000:]
         path = getattr(self.server, 'error_log', None)
         if path:
             diagnostics.record(path, route, error, self._inputs,
                                {'public': self.server.cfg.public})
+        # hold it against the session so "report this" has something to send,
+        # along with the files themselves in case the user offers them
+        sess = self.server.sessions.get(self._sid())
+        if sess is not None:
+            sess['last_failure'] = (report, list(self._inputs))
+        return report
+
+    def _do_report(self):
+        """Take a failure report the user chose to send.
+
+        No second Turnstile check: this session already passed one to run the
+        job that failed, and asking again to report a bug is a good way to not
+        hear about bugs. Files can only come from that session's own failed
+        attempt, so this cannot be used as a general upload endpoint.
+        """
+        sess = self.server.sessions.get(self._sid())
+        if sess is None:
+            self._json({'ok': False, 'error': t('web.no_session')}, status=403)
+            return
+        length = int(self.headers.get('Content-Length', 0) or 0)
+        if length > 64 * 1024:
+            self._json({'ok': False, 'error': t('web.stale_page')}, status=413)
+            return
+        try:
+            body = json.loads(self.rfile.read(length).decode('utf-8'))
+        except ValueError:
+            self._json({'ok': False, 'error': t('web.stale_page')}, status=400)
+            return
+        if body.get('page_token') != sess['page_token']:
+            self._json({'ok': False, 'error': t('web.stale_page')}, status=403)
+            return
+
+        held = sess.get('last_failure')
+        if not held:
+            self._json({'ok': False, 'error': t('web.report.gone')}, status=409)
+            return
+        report, files = held
+        report = dict(report, note=str(body.get('note') or '')[:2000],
+                      user_agent=self.headers.get('User-Agent', '')[:300])
+
+        attach = bool(body.get('attach'))
+        available = [p for p in files if p and os.path.exists(p)]
+        rid = diagnostics.save_report(self.server.reports_dir, report,
+                                      available if attach else ())
+        self._json({'ok': True, 'id': rid,
+                    'attached': bool(attach and available),
+                    'wanted_attach': attach})
 
     def _sid(self):
         raw = self.headers.get('Cookie', '')
@@ -1039,7 +1199,8 @@ class Handler(BaseHTTPRequestHandler):
                 sess = self.server.sessions.get(sid)
                 headers.append(('Set-Cookie',
                                 'bes=%s; Path=/; HttpOnly; SameSite=Strict' % sid))
-            self._send(render_page(self.server.cfg, sess['page_token']),
+            self._send(render_page(self.server.cfg, sess['page_token'],
+                                   reports_on=bool(self.server.reports_dir)),
                        headers=headers)
         elif p.path == '/skill':
             # the agent route: hand over the instructions so someone's own
@@ -1069,6 +1230,9 @@ class Handler(BaseHTTPRequestHandler):
     # ---- POST ----------------------------------------------------------- #
     def do_POST(self):
         route = urllib.parse.urlparse(self.path).path
+        if route == '/api/report':
+            self._do_report()
+            return
         if route not in ('/api/merge', '/api/split', '/api/remerge'):
             self._json({'ok': False, 'error': 'unknown endpoint'}, status=404)
             return
@@ -1123,8 +1287,10 @@ class Handler(BaseHTTPRequestHandler):
                 payload['log'] = buf.getvalue().strip()
                 payload['ok'] = True
             except SystemExit as e:
-                # these carry a message written for a person to read
-                payload = {'ok': False, 'error': str(e)}
+                # these carry a message written for a person to read -- but not
+                # the server-side path they happened to mention, which is a
+                # temp directory and a session id the reader has no use for
+                payload = {'ok': False, 'error': diagnostics.scrub(str(e))}
                 self._log_failure(route, e)
             except Exception as e:
                 # an unexpected failure: log it here, but do not ship the
@@ -1198,6 +1364,9 @@ def main():
                          'isolate visitors, rate-limit, and expire uploads')
     ap.add_argument('--host', default=None,
                     help='bind address (default 127.0.0.1, or 0.0.0.0 with --public)')
+    ap.add_argument('--reports-dir', default=None, metavar='PATH',
+                    help='where user-submitted failure reports are kept '
+                         '(enables the "report this failure" button)')
     ap.add_argument('--error-log', default=None, metavar='PATH',
                     help='append a JSON line describing each failed job '
                          '(structure and traceback only, never book text)')
@@ -1239,6 +1408,9 @@ def main():
     os.makedirs(srv.outputs)
     srv.cfg = cfg
     srv.error_log = args.error_log
+    srv.reports_dir = args.reports_dir or os.path.join(workdir, 'reports')
+    if not os.path.isdir(srv.reports_dir):
+        os.makedirs(srv.reports_dir)
     srv.offered = build_demo(workdir)
     srv.sessions = guard.Sessions(os.path.join(workdir, 'sessions'), ttl=args.ttl)
     srv.limiter = guard.RateLimit()
@@ -1255,6 +1427,8 @@ def main():
     if args.error_log:
         print('  failures logged to %s (file structure only, no book text)'
               % args.error_log)
+    if args.reports_dir:
+        print('  user-submitted reports go to %s' % args.reports_dir)
     if args.public:
         print('  public mode: server-side paths refused, one scratch area per '
               'visitor, rate limited, uploads expire after %d min.'

@@ -21,6 +21,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import threading
 import traceback
 import zipfile
@@ -118,3 +119,29 @@ def record(log_path, endpoint, error, inputs=(), extra=None):
                 f.write(line + '\n')
     except Exception:
         pass        # diagnostics must never be the reason a request fails
+
+
+def save_report(reports_dir, report, files=()):
+    """Persist a user-submitted failure report, optionally with the books.
+
+    Returns the report id. Files are only ever copied here because the person
+    who uploaded them ticked a box saying so; everything else in the report is
+    the structural description that gets recorded anyway.
+    """
+    rid = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + os.urandom(3).hex()
+    dest = os.path.join(reports_dir, rid)
+    os.makedirs(dest)
+    attached = []
+    for i, path in enumerate(files):
+        if not path or not os.path.exists(path):
+            continue
+        # keep only the extension: the uploaded name is often the book's title
+        name = 'input-%d%s' % (i + 1, os.path.splitext(path)[1] or '.epub')
+        shutil.copy2(path, os.path.join(dest, name))
+        attached.append(name)
+    report = dict(report, id=rid, attached=attached,
+                  saved_at=datetime.datetime.now(datetime.timezone.utc)
+                  .isoformat(timespec='seconds'))
+    with open(os.path.join(dest, 'report.json'), 'w', encoding='utf-8') as f:
+        json.dump(report, f, ensure_ascii=False, indent=1)
+    return rid

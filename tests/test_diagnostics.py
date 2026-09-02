@@ -101,3 +101,45 @@ def test_recorded_error_carries_no_uploaded_filename(tmp_path):
     blob = open(log, encoding='utf-8').read()
     assert '悲惨世界' not in blob, 'book title leaked into the log'
     assert json.loads(blob)['inputs'][0]['bad_zip'] is True
+
+
+def test_save_report_renames_attachments(tmp_path, en_epub):
+    """The uploaded name is usually the book's title, so attachments are
+    numbered instead."""
+    book = tmp_path / '悲惨世界.epub'
+    book.write_bytes(open(en_epub, 'rb').read())
+    reports = str(tmp_path / 'reports')
+    os.makedirs(reports)
+    rid = diagnostics.save_report(reports, {'endpoint': '/api/merge',
+                                            'error': 'boom'}, [str(book)])
+    where = os.path.join(reports, rid)
+    names = sorted(os.listdir(where))
+    assert names == ['input-1.epub', 'report.json']
+    assert os.path.getsize(os.path.join(where, 'input-1.epub')) > 0
+    saved = json.load(open(os.path.join(where, 'report.json'), encoding='utf-8'))
+    assert saved['attached'] == ['input-1.epub']
+    assert saved['id'] == rid
+    blob = open(os.path.join(where, 'report.json'), encoding='utf-8').read()
+    assert '悲惨世界' not in blob
+
+
+def test_save_report_without_attachments(tmp_path):
+    """Declining to send the book still files a usable report."""
+    reports = str(tmp_path / 'r')
+    os.makedirs(reports)
+    rid = diagnostics.save_report(reports, {'endpoint': '/api/merge',
+                                            'error': 'boom'}, ())
+    saved = json.load(open(os.path.join(reports, rid, 'report.json'),
+                           encoding='utf-8'))
+    assert saved['attached'] == []
+    assert os.listdir(os.path.join(reports, rid)) == ['report.json']
+
+
+def test_save_report_skips_files_already_swept(tmp_path):
+    reports = str(tmp_path / 'r')
+    os.makedirs(reports)
+    rid = diagnostics.save_report(reports, {'error': 'x'},
+                                  ['/nonexistent/gone.epub'])
+    saved = json.load(open(os.path.join(reports, rid, 'report.json'),
+                           encoding='utf-8'))
+    assert saved['attached'] == []
