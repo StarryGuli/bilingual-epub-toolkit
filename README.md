@@ -74,8 +74,8 @@ trying the tool without installing it; uploads there are capped at 25 MB and
 deleted after 30 minutes.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/screenshot.png" width="100%"
-       alt="The local web interface: two EPUBs dropped in on the left, the merged bilingual result previewed on the right">
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/demo.gif" width="100%"
+       alt="Two EPUBs picked, uploaded, and merged, ending with the per-chapter alignment table">
 </p>
 
 ## Usage
@@ -239,6 +239,8 @@ book files; see [`tests/conftest.py`](./tests/conftest.py). Coverage includes
 the three operations end to end, both cover image formats, the translation
 round trip against a stub API, public-mode isolation and rate limiting, and
 the error paths.
+
+Coverage and conventions are described in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 

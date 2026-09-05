@@ -68,8 +68,8 @@ bilingual-epub merge --a examples/sample-en.epub --b examples/sample-fr.epub --o
 那台上传上限 25 MB，文件 30 分钟后自动删除。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/screenshot.png" width="100%"
-       alt="本地网页界面：左边拖入两本 EPUB，右边实时预览合并结果">
+  <img src="https://raw.githubusercontent.com/StarryGuli/bilingual-epub-toolkit/main/assets/readme/demo.gif" width="100%"
+       alt="选好两本 EPUB、上传、合并，最后是按章的对齐统计表">
 </p>
 
 ## 用法
@@ -216,6 +216,8 @@ pytest && ruff check .
 测试用的 EPUB 由代码现场构造，不往仓库里放书，见
 [`tests/conftest.py`](./tests/conftest.py)。覆盖三个操作的端到端流程、两种封面图格式、
 针对桩 API 的翻译往返、公开模式的会话隔离与限流，以及各条错误路径。
+
+测试范围和约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 许可
 

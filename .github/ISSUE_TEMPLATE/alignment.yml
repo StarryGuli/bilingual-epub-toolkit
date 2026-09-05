@@ -1,0 +1,29 @@
+name: The paragraphs pair badly
+description: It ran, but the two languages line up wrongly
+labels: [alignment]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Alignment is statistical, so some drift is expected on editions that
+        add, cut or restructure text. The per-chapter table printed after a
+        merge is how it is judged — please include it.
+  - type: textarea
+    id: table
+    attributes:
+      label: The table the merge printed
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where it goes wrong
+      description: Which chapter, and roughly how far in. A mismatched pair helps.
+    validations:
+      required: true
+  - type: input
+    id: editions
+    attributes:
+      label: Are the two editions the same text?
+      description: Abridged, different edition, translator's preface — anything that differs.

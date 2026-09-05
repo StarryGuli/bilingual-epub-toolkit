@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Try it without installing
+    url: https://epub.starry-files.duckdns.org
+    about: The hosted instance, for checking whether a book works at all

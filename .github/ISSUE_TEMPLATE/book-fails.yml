@@ -1,0 +1,52 @@
+name: A book does not work
+description: Merging, splitting or translating a particular EPUB fails or produces something wrong
+labels: [book]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not attach the book itself — it is almost certainly still in
+        copyright, and its *structure* is what is actually needed:
+
+        ```bash
+        bilingual-epub export-text --in problem.epub --out structure.json
+        ```
+
+        That file contains the book's text, so if the text is sensitive, the
+        error message and the entry listing (`unzip -l problem.epub`) are
+        usually enough on their own.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you ran
+      description: The exact command, or which button on the web page.
+      placeholder: bilingual-epub merge --a english.epub --b chinese.epub --out out.epub
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: The error, or a description of what came out wrong.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "`pip show bilingual-epub-toolkit`, or the hosted instance."
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: langs
+    attributes:
+      label: Language pair
+      placeholder: English + Simplified Chinese
+  - type: textarea
+    id: shape
+    attributes:
+      label: What the file looks like inside (optional but the most useful part)
+      description: Output of `unzip -l problem.epub`, or the structure export.
+      render: text
