@@ -22,13 +22,14 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import diagnostics, guard, samples
+from . import diagnostics, guard, multipart, samples
 from . import merge as merge_mod
 from . import split as split_mod
 from .i18n import get_lang, set_lang, t
 
 HOST, PORT = '127.0.0.1', 8799
 MAX_UPLOAD = 200 * 1024 * 1024      # generous; these are books, not videos
+MAX_FORM_BODY = 1 << 20             # urlencoded bodies are never large here
 
 # --------------------------------------------------------------------------- #
 # Static assets. Kept as plain constants and injected with str.replace() rather
@@ -1086,16 +1087,9 @@ class Handler(BaseHTTPRequestHandler):
     def _source(self, fields, files, file_key, path_key, label):
         """A dropped upload wins over a typed path; one of the two is required."""
         if file_key in files:
-            name, blob = files[file_key]
-            safe = os.path.basename(name) or 'upload.epub'
-            # one directory per upload rather than a name prefix, so the
-            # original filename survives into the split/merge output names
-            sess = self.server.sessions.get(self._sid())
-            root = sess['dir'] if sess else self.server.uploads
-            slot = tempfile.mkdtemp(dir=root)
-            dest = os.path.join(slot, safe)
-            with open(dest, 'wb') as f:
-                f.write(blob)
+            # already streamed to its own directory under the session, with the
+            # client's filename preserved so split/merge output names read well
+            _client_name, dest = files[file_key]
             self._inputs.append(dest)
             return dest
         typed = (fields.get(path_key) or '').strip()
@@ -1252,16 +1246,35 @@ class Handler(BaseHTTPRequestHandler):
 
         ctype = self.headers.get('Content-Type', '')
         length = int(self.headers.get('Content-Length', 0) or 0)
-        if length > cfg.max_upload:
+        if length > cfg.max_upload * 2 + (4 << 20):
             self._json({'ok': False,
                         'error': t('web.too_big', cfg.max_upload // 1048576)},
                        status=413)
             return
-        body = self.rfile.read(length) if length else b''
+
+        # Stream straight to disk. Reading the body into memory and splitting it
+        # is what got this process OOM-killed nine times.
+        scratch = sess['dir']
         if 'multipart/form-data' in ctype and 'boundary=' in ctype:
             boundary = ctype.split('boundary=', 1)[1].strip().strip('"').encode()
-            fields, files = parse_multipart(body, boundary)
+            try:
+                fields, parts = multipart.parse(self.rfile, boundary, length,
+                                                scratch)
+            except multipart.TooLarge:
+                self._json({'ok': False,
+                            'error': t('web.too_big', cfg.max_upload // 1048576)},
+                           status=413)
+                return
+            files = {}
+            for name, (client_name, path) in parts.items():
+                if os.path.getsize(path) > cfg.max_upload:
+                    self._json({'ok': False,
+                                'error': t('web.too_big',
+                                           cfg.max_upload // 1048576)}, status=413)
+                    return
+                files[name] = (client_name, path)
         else:
+            body = self.rfile.read(min(length, MAX_FORM_BODY))
             fields = {k: v[0] for k, v in
                       urllib.parse.parse_qs(body.decode('utf-8', 'replace')).items()}
             files = {}
@@ -1414,7 +1427,7 @@ def main():
     srv.offered = build_demo(workdir)
     srv.sessions = guard.Sessions(os.path.join(workdir, 'sessions'), ttl=args.ttl)
     srv.limiter = guard.RateLimit()
-    srv.slots = threading.BoundedSemaphore(2)
+    srv.slots = threading.BoundedSemaphore(1)
     reaper = guard.Reaper(srv.sessions, srv.limiter)
     reaper.start()
 
