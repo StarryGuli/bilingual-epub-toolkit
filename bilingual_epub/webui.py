@@ -295,6 +295,14 @@ select { appearance: none; cursor: pointer;
 .go:active:not(:disabled) { transform: translateY(1px); }
 .go:disabled { opacity: .6; cursor: progress; }
 
+.prog { margin-top: .9rem; height: 6px; border-radius: 999px;
+        background: var(--line); overflow: hidden; display: none; }
+.prog.on { display: block; }
+.prog i { display: block; height: 100%; width: 0; background: var(--accent);
+          border-radius: 999px; transition: width .2s ease; }
+.prog-t { display: none; margin-top: .45rem; font-size: .8rem; color: var(--ink-soft); }
+.prog-t.on { display: block; }
+
 .spinner {
   display: none; width: 14px; height: 14px; margin-right: .5rem;
   vertical-align: -2px;
@@ -595,7 +603,38 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
       return;
     }
 
-    const res = await fetch(form.action, { method: 'POST', body: new FormData(form) });
+    // XHR, not fetch: fetch cannot report upload progress, and a silent
+    // spinner through a multi-minute phone upload is why people abandoned
+    // mid-transfer -- those were the 499s in the access log.
+    const bar = $('.prog', form), fill = $('.prog i', form), ptext = $('.prog-t', form);
+    bar.classList.add('on'); ptext.classList.add('on');
+    fill.style.width = '0%'; ptext.textContent = L.slowHintJs;
+
+    const res = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', form.action);
+      xhr.upload.onprogress = ev => {
+        if (!ev.lengthComputable) return;
+        const pct = Math.round(ev.loaded / ev.total * 100);
+        fill.style.width = pct + '%';
+        ptext.textContent = L.uploadingJs
+          .replace('%s', pct)
+          .replace('%s', (ev.loaded / 1048576).toFixed(1))
+          .replace('%s', (ev.total / 1048576).toFixed(1));
+      };
+      xhr.upload.onload = () => {
+        fill.style.width = '100%';
+        ptext.textContent = L.workingJs;
+      };
+      xhr.onload = () => resolve({
+        status: xhr.status,
+        headers: { get: h => xhr.getResponseHeader(h) },
+        body: xhr.responseText,
+      });
+      xhr.onerror = () => reject(new TypeError('network'));
+      xhr.onabort = () => reject(new TypeError('aborted'));
+      xhr.send(new FormData(form));
+    });
 
     // Never assume the body is JSON. A gateway that refuses the request --
     // 413 for an oversized upload, 502/504 when the backend is slow -- answers
@@ -613,7 +652,7 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
       return;
     }
 
-    const data = await res.json();
+    const data = JSON.parse(res.body);
     if (data.ok) {
       const links = (data.files || []).map(f =>
         '<a class="dl" href="/download?id=' + encodeURIComponent(f.id) + '" download>↓ ' +
@@ -628,10 +667,11 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
         esc(data.error) + '</pre>' + reportUI() + '</div>';
     }
   } catch (err) {
-    const dropped = (err instanceof TypeError);   // fetch's network failure
+    const dropped = (err instanceof TypeError);   // the transport gave up
     out.innerHTML = '<div class="card bad"><h3>' + esc(L.reqFailed) + '</h3><p>' +
       esc(dropped ? L.droppedJs : String(err)) + '</p></div>';
   } finally {
+    bar.classList.remove('on'); ptext.classList.remove('on');
     btn.disabled = false; btn.classList.remove('busy');
     // a Turnstile token is single-use: without resetting, a second submit
     // replays a spent one and is rejected
@@ -656,8 +696,8 @@ class Config:
         self.turnstile = turnstile or guard.Turnstile()
         # a public host processes strangers' files on someone else's disk, so
         # the ceiling is much lower than what a local user should be allowed
-        self.max_upload = max_upload or (40 * 1024 * 1024 if public
-                                         else 200 * 1024 * 1024)
+        self.max_upload = max_upload or (100 * 1024 * 1024 if public
+                                         else 400 * 1024 * 1024)
         self.ttl = ttl
         # reading an arbitrary server path is the whole point locally and an
         # arbitrary-file-read hole in public
@@ -877,6 +917,7 @@ def _merge_panel(cfg, page_token):
         '<div class="field"><label>' + t('web.title') + '</label>'
         '<input type="text" name="title" placeholder="' + t('web.title.ph') + '"></div>'
         + cfg.turnstile.widget_html() +
+        '<div class="prog"><i></i></div><div class="prog-t"></div>'
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.merge') + '</button>'
         '</div>' + _merge_preview() + '</div></form>'
@@ -896,6 +937,7 @@ def _split_panel(cfg, page_token):
         '<input type="text" name="langs" placeholder="en,fr">'
         '<span class="hint">' + t('web.langs.hint') + '</span></div>'
         + cfg.turnstile.widget_html() +
+        '<div class="prog"><i></i></div><div class="prog-t"></div>'
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.split') + '</button>'
         '</div>' + _split_preview() + '</div></form>'
@@ -921,6 +963,7 @@ def _remerge_panel(cfg, page_token):
         '</div>'
         + _blur_controls()
         + cfg.turnstile.widget_html() +
+        '<div class="prog"><i></i></div><div class="prog-t"></div>'
         '<button class="go" type="submit"><span class="spinner"></span>'
         + t('web.go.remerge') + '</button>'
         '</div>' + _remerge_preview() + '</div></form>'
@@ -971,6 +1014,8 @@ def render_page(cfg=None, page_token='', reports_on=False):
         'reportSend': t('web.report.send'), 'reportCancel': t('web.report.cancel'),
         'reportOk': t('web.report.ok'), 'reportNoFiles': t('web.report.nofiles'),
         'pageToken': page_token,
+        'uploadingJs': t('web.js.uploading'), 'workingJs': t('web.js.working'),
+        'slowHintJs': t('web.js.slowhint'),
         'tooBigJs': t('web.js.too_big'), 'rejectedJs': t('web.js.rejected'),
         'gatewayJs': t('web.js.gateway'), 'droppedJs': t('web.js.dropped'),
     }, ensure_ascii=False)

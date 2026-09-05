@@ -415,6 +415,15 @@ STRINGS = {
                           'phone network this usually means the upload was '
                           'interrupted.',
                           '结果还没回来连接就断了。手机网络下通常是上传被中断了。'),
+    # consumed by the page's JS via .replace(), never by Python %-formatting,
+    # so a literal percent sign must not be doubled
+    'web.js.uploading':  ('Uploading %s% — %s of %s MB',
+                          '上传中 %s% —— %s / %s MB'),
+    'web.js.working':    ('Uploaded. Aligning the book, this is the slow part…',
+                          '传完了，正在对齐段落，这步最慢…'),
+    'web.js.slowhint':   ('Large books over a phone connection can take a few '
+                          'minutes. Leaving this page cancels it.',
+                          '手机网络传大书可能要几分钟。离开这个页面就会取消。'),
     'web.report.btn':    ('Report this failure', '报告这个问题'),
     'web.report.head':   ('Send this to the maintainer?', '把这次失败发给作者？'),
     'web.report.what':   ('What gets sent either way: the error, and the shape of '
