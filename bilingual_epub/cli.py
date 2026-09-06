@@ -127,9 +127,13 @@ def cmd_remerge(args):
 def _print_stats(stats):
     print('%-8s %5s %5s | %5s %5s %6s %6s' %
           (t('stats.chapter'), t('stats.a'), t('stats.b'), '1:1', 'n:m',
-           t('stats.a_only'), t('stats.b_only')))
+           t('stats.a_only'), t('stats.b_only')), end='')
+    print('%7s' % t('stats.unsure'))
     for row in stats:
-        print('%-8s %5d %5d | %5d %5d %6d %6d' % row)
+        print('%-8s %5d %5d | %5d %5d %6d %6d %7d' % row)
+    total_unsure = sum(r[7] for r in stats)
+    if total_unsure:
+        print('\n' + t('stats.unsure_note', total_unsure))
 
 
 def main(argv=None):

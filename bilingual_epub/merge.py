@@ -132,9 +132,10 @@ def _plain(frag):
 
 
 def render_chapter(cid, idx, title_a, title_b, bead_slice, blur_side, blur_em,
-                   cc, convert_side, toggle_label, stats):
+                   cc, convert_side, toggle_label, stats, shaky=()):
     out, k = [], 0
     n11 = nxx = n_a_only = n_b_only = a_count = b_count = 0
+    n_shaky = 0
 
     # NOTE: we deliberately do NOT render a separate "chapter title" header
     # here -- the heading pair that triggered this chapter cut is still the
@@ -146,7 +147,7 @@ def render_chapter(cid, idx, title_a, title_b, bead_slice, blur_side, blur_em,
     # or mis-scattered that duplicate text. One rendering, correctly tagged,
     # is both simpler and correct.
     has_blur = False
-    for a_bs, b_bs in bead_slice:
+    for bead_i, (a_bs, b_bs) in enumerate(bead_slice):
         a_count += len(a_bs)
         b_count += len(b_bs)
         if a_bs and b_bs:
@@ -162,7 +163,14 @@ def render_chapter(cid, idx, title_a, title_b, bead_slice, blur_side, blur_em,
         is_head = any(t.startswith('h') for t, _f, _l in a_bs) or any(t.startswith('h') for t, _f, _l in b_bs)
         if is_head:
             cls += ' sec'
-        out.append('<div class="%s">' % cls)
+        mark = ''
+        if bead_i in shaky:
+            n_shaky += 1
+            # the aligner nearly paired these differently; flagged rather than
+            # hidden, so it can be reviewed instead of silently trusted
+            cls += ' unsure'
+            mark = ' data-unsure="1"'
+        out.append('<div class="%s"%s>' % (cls, mark))
         for side_name, side_bs in (('a', a_bs), ('b', b_bs)):
             for tag, frag, lang in side_bs:
                 t = 'h2' if tag.startswith('h') else 'p'
@@ -183,7 +191,7 @@ def render_chapter(cid, idx, title_a, title_b, bead_slice, blur_side, blur_em,
                                % (t, cls2, lang or '', lang or '', body, t))
         out.append('</div>')
 
-    stats.append((cid, a_count, b_count, n11, nxx, n_a_only, n_b_only))
+    stats.append((cid, a_count, b_count, n11, nxx, n_a_only, n_b_only, n_shaky))
     return PAGE % {
         'title': (_plain(title_a or title_b) or ('Chapter %d' % idx)),
         'chapcls': 'chap' if has_blur else 'chap noblur',
@@ -222,16 +230,27 @@ def merge_bilingual(a_epub, b_epub, out_path, workdir=None, blur='0.25em',
             raise SystemExit('B 侧 EPUB 提取不到任何正文段落，检查文件是否有效/是否加了 DRM: %s' % b_epub)
 
         beads = ae.align(a_blocks, b_blocks)
+        # which of those pairings the aligner nearly got wrong; the set is
+        # carried through so the reader, and any agent asked to check the
+        # result, can go straight to the doubtful parts
+        margins = ae.confidence(a_blocks, b_blocks, beads)
+        shaky = set(ae.doubtful(margins))
         level = ae.pick_chapter_level(beads)
         raw_chapters = ae.split_into_chapters(beads, level)
 
         cc = _cc(cc_config)
         stats = []
         chapters = []
+        seen = 0
         for idx, (title_a, title_b, bead_slice) in enumerate(raw_chapters, 1):
             cid = 'ch%03d' % idx
+            # bead indices are global; each chapter needs its own slice of them
+            marks = {k - seen for k in shaky
+                     if seen <= k < seen + len(bead_slice)}
+            seen += len(bead_slice)
             xhtml = render_chapter(cid, idx, title_a, title_b, bead_slice,
-                                   blur_side, blur, cc, convert_side, toggle_label, stats)
+                                   blur_side, blur, cc, convert_side, toggle_label,
+                                   stats, marks)
             chapters.append((cid, _plain(title_a or title_b or ('Chapter %d' % idx)), xhtml, {'scripted'}))
 
         cover_bytes = None

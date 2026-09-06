@@ -508,7 +508,7 @@ $$('.preview').forEach(pv => pv.addEventListener('click', e => {
 /* ---- submit ---- */
 function statsTable(rows) {
   if (!rows || !rows.length) return '';
-  const head = [L.chapter, L.a, L.b, '1:1', 'n:m', L.aOnly, L.bOnly];
+  const head = [L.chapter, L.a, L.b, '1:1', 'n:m', L.aOnly, L.bOnly, L.unsure];
   const th = head.map(h => '<th>' + h + '</th>').join('');
   const tr = rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('');
   return '<div class="scroller"><table class="stats"><thead><tr>' + th +
@@ -1003,6 +1003,7 @@ def render_page(cfg=None, page_token='', reports_on=False):
     labels = json.dumps({
         'chapter': t('web.res.chapter'), 'a': t('web.res.a'), 'b': t('web.res.b'),
         'aOnly': t('web.res.a_only'), 'bOnly': t('web.res.b_only'),
+        'unsure': t('stats.unsure'),
         'failed': t('web.res.failed'), 'reqFailed': t('web.res.reqfail'),
         'uploaded': t('web.uploaded'),
         # the browser needs the ceiling so it can refuse before uploading

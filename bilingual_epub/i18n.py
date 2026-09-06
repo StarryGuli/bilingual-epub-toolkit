@@ -424,6 +424,12 @@ STRINGS = {
     'web.js.slowhint':   ('Large books over a phone connection can take a few '
                           'minutes. Leaving this page cancels it.',
                           '手机网络传大书可能要几分钟。离开这个页面就会取消。'),
+    'stats.unsure':      ('unsure', '存疑'),
+    'stats.unsure_note': ('%d pairings were close calls. They are marked '
+                          'data-unsure="1" in the output, so a reader or an '
+                          'agent can check just those.',
+                          '有 %d 处配对是勉强选出来的，输出里标了 '
+                          'data-unsure="1"，人或 agent 只看这些地方就行。'),
     'web.report.btn':    ('Report this failure', '报告这个问题'),
     'web.report.head':   ('Send this to the maintainer?', '把这次失败发给作者？'),
     'web.report.what':   ('What gets sent either way: the error, and the shape of '

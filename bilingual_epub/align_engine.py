@@ -185,6 +185,180 @@ def align(a_blocks, b_blocks):
 
 
 # --------------------------------------------------------------------------- #
+# how much to trust each pairing
+#
+# Running the aligner backwards and comparing, which is the obvious version of
+# this idea, finds nothing: the step costs are symmetric and the DP is a global
+# optimum, so reversing the lattice returns the very same path. Measured on a
+# real pair with an extra paragraph spliced into one side -- identical output,
+# both directions.
+#
+# What the two directions are actually good for is a margin. Cost-to-here plus
+# cost-from-here gives the best total through any point in the lattice, so for
+# each paragraph the chosen pairing can be compared against the best available
+# alternative. A wide gap means the aligner had a clear winner; a narrow one
+# means it nearly went elsewhere, and that is the region worth a second look --
+# by a person, or by an agent that only needs to examine the doubtful parts
+# rather than re-reading the whole book.
+#
+# Both passes run in a band around the optimal path. A full second matrix would
+# double the memory of the alignment, which for a long book is already the
+# largest thing in the process, and alternatives far from the path are not the
+# ones being asked about.
+#
+# What this cannot do: catch a pairing that is wrong but unambiguous. The
+# margin says how sure the *length model* was, and the length model is content
+# whenever the numbers line up. Reorder several paragraphs that happen to be
+# about the same length and the aligner pairs them confidently and incorrectly,
+# with no dip in margin at all -- there is a test pinning exactly that case.
+# Finding those needs something that reads the text: a semantic model, or a
+# person. This narrows down where they have to look; it does not replace them.
+# --------------------------------------------------------------------------- #
+
+def _prep(a_blocks, b_blocks):
+    a_len = [len(_plain(b[1])) for b in a_blocks]
+    b_len = [len(_plain(b[1])) for b in b_blocks]
+    a_head = [b[0].startswith('h') for b in a_blocks]
+    b_head = [b[0].startswith('h') for b in b_blocks]
+    c = (sum(a_len) or 1) / (sum(b_len) or 1)
+    return a_len, b_len, a_head, b_head, c
+
+
+def _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c):
+    """Cost of consuming di source blocks against dj target blocks at (i, j)."""
+    x = sum(a_len[i:i + di])
+    y = sum(b_len[j:j + dj])
+    cost = PRIOR_COST[(di, dj)]
+    if di and dj:
+        cost += _len_cost(x, y, c)
+        ah = any(a_head[i:i + di])
+        bh = any(b_head[j:j + dj])
+        if ah and bh:
+            cost -= HEAD_BONUS
+        elif ah != bh:
+            cost += HEAD_PENALTY
+    else:
+        cost += 0.55 * (x if di else y * c)
+        if (di and any(a_head[i:i + di])) or (dj and any(b_head[j:j + dj])):
+            cost += 200.0
+    return cost
+
+
+STEPS = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)]
+
+
+def _path_points(beads):
+    """The lattice points the optimal path passes through."""
+    pts, i, j = [(0, 0)], 0, 0
+    for a_part, b_part in beads:
+        i += len(a_part)
+        j += len(b_part)
+        pts.append((i, j))
+    return pts
+
+
+def confidence(a_blocks, b_blocks, beads, band=40):
+    """Margin, in cost units, between each pairing and the next-best option.
+
+    Returns a list the same length as `beads`. A small number means the
+    aligner nearly chose differently there.
+    """
+    n, m = len(a_blocks), len(b_blocks)
+    if not beads or not n or not m:
+        return [float('inf')] * len(beads)
+    a_len, b_len, a_head, b_head, c = _prep(a_blocks, b_blocks)
+    pts = _path_points(beads)
+
+    # the band: for each i, the range of j worth considering
+    on_path = {}
+    for i, j in pts:
+        on_path.setdefault(i, j)
+    last = 0
+    centre = []
+    for i in range(n + 1):
+        last = on_path.get(i, last)
+        centre.append(last)
+    lo = [max(0, centre[i] - band) for i in range(n + 1)]
+    hi = [min(m, centre[i] + band) for i in range(n + 1)]
+
+    INF = float('inf')
+
+    # Both passes walk j in a fixed order so that a same-row step -- (0, 1),
+    # skipping a target block -- lands on a cell that is already final. An
+    # earlier version relaxed out of a snapshot of the row, which silently
+    # capped those chains at one step, inflated the forward costs, and produced
+    # margins of minus a hundred thousand: an "alternative" cheaper than the
+    # optimum, which is arithmetically impossible and was the tell.
+    fwd = [dict() for _ in range(n + 1)]
+    fwd[0][0] = 0.0
+    for i in range(n + 1):
+        for j in range(lo[i], hi[i] + 1):
+            base = fwd[i].get(j)
+            if base is None:
+                continue
+            for di, dj in STEPS:
+                ni, nj = i + di, j + dj
+                if ni > n or nj > m or not (lo[ni] <= nj <= hi[ni]):
+                    continue
+                v = base + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
+                if v < fwd[ni].get(nj, INF):
+                    fwd[ni][nj] = v
+
+    bwd = [dict() for _ in range(n + 1)]
+    bwd[n][m] = 0.0
+    for i in range(n, -1, -1):
+        for j in range(hi[i], lo[i] - 1, -1):
+            best = bwd[i].get(j, INF)
+            for di, dj in STEPS:
+                ni, nj = i + di, j + dj
+                if ni > n or nj > m:
+                    continue
+                rest = bwd[ni].get(nj)
+                if rest is None:
+                    continue
+                v = rest + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
+                if v < best:
+                    best = v
+            if best < INF:
+                bwd[i][j] = best
+
+    best_total = fwd[n].get(m, INF)
+    out = []
+    for k in range(len(beads)):
+        i, j = pts[k + 1]
+        alt = INF
+        for jj in range(lo[i], hi[i] + 1):
+            if jj == j:
+                continue
+            f = fwd[i].get(jj)
+            b = bwd[i].get(jj)
+            if f is not None and b is not None and f + b < alt:
+                alt = f + b
+        out.append(INF if alt == INF or best_total == INF else alt - best_total)
+    return out
+
+
+def doubtful(margins, ratio=0.25, floor=8.0):
+    """Indices of the pairings the aligner was least sure about.
+
+    The test is relative to the book's own margins, not an absolute number of
+    cost units. Cost scales with paragraph length, language pair and how freely
+    the translation was written, so a threshold tuned on one book flags
+    everything in the next. Measured on one pair: a clean merge sat at a median
+    margin of 990 with a minimum of 681, splicing an extra paragraph into one
+    side pulled the minimum to 177, and shuffling three paragraphs pulled it to
+    60. Against the median those separate cleanly; against a fixed number they
+    do not.
+    """
+    finite = sorted(m for m in margins if m != float('inf'))
+    if not finite:
+        return []
+    median = finite[len(finite) // 2]
+    cutoff = max(median * ratio, floor)
+    return [k for k, mgn in enumerate(margins) if mgn < cutoff]
+
+
+# --------------------------------------------------------------------------- #
 # heading-based chapter splitting -- replaces any book-specific chapter table
 # --------------------------------------------------------------------------- #
 
