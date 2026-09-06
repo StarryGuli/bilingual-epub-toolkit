@@ -127,61 +127,87 @@ def _len_cost(x, y, c, s2=6.8):
     return -100.0 * math.log(max(p, 1e-30))
 
 
-def align(a_blocks, b_blocks):
-    """a_blocks/b_blocks: [(tag, html, lang)]. Returns list of (a_slice, b_slice)
-    where each slice is a list of blocks from the respective side."""
-    n, m = len(a_blocks), len(b_blocks)
-    a_len = [len(_plain(b[1])) for b in a_blocks]
-    b_len = [len(_plain(b[1])) for b in b_blocks]
-    a_head = [b[0].startswith('h') for b in a_blocks]
-    b_head = [b[0].startswith('h') for b in b_blocks]
+def _align_banded(a_blocks, b_blocks, band):
+    """One pass of the DP, restricted to a corridor around the diagonal.
 
-    tot_a, tot_b = sum(a_len) or 1, sum(b_len) or 1
-    c = tot_a / tot_b
+    Returns (beads, touched_edge). The flag says whether the chosen path ever
+    ran up against the corridor wall, which is the signal that the corridor was
+    too narrow to contain the real answer.
+    """
+    n, m = len(a_blocks), len(b_blocks)
+    a_len, b_len, a_head, b_head, c = _prep(a_blocks, b_blocks)
+
+    # centre the corridor on the diagonal, scaled by the two lengths
+    ratio = (m / n) if n else 0.0
+    lo, hi = [], []
+    for i in range(n + 1):
+        mid = int(round(i * ratio))
+        lo.append(max(0, mid - band))
+        hi.append(min(m, mid + band))
+    lo[n] = min(lo[n], m)
+    hi[n] = m
+    hi[0] = max(hi[0], 0)
 
     INF = float('inf')
-    D = [[INF] * (m + 1) for _ in range(n + 1)]
-    B = [[None] * (m + 1) for _ in range(n + 1)]
+    D = [dict() for _ in range(n + 1)]
+    B = [dict() for _ in range(n + 1)]
     D[0][0] = 0.0
-
-    steps = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)]
     for i in range(n + 1):
         Di = D[i]
-        for j in range(m + 1):
-            if Di[j] == INF:
+        for j in range(lo[i], hi[i] + 1):
+            base = Di.get(j)
+            if base is None:
                 continue
-            base = Di[j]
-            for di, dj in steps:
+            for di, dj in STEPS:
                 ni, nj = i + di, j + dj
-                if ni > n or nj > m:
+                if ni > n or nj > m or not (lo[ni] <= nj <= hi[ni]):
                     continue
-                x = sum(a_len[i:ni])
-                y = sum(b_len[j:nj])
-                cost = PRIOR_COST[(di, dj)]
-                if di and dj:
-                    cost += _len_cost(x, y, c)
-                    ah = any(a_head[i:ni])
-                    bh = any(b_head[j:nj])
-                    if ah and bh:
-                        cost -= HEAD_BONUS
-                    elif ah != bh:
-                        cost += HEAD_PENALTY
-                else:
-                    dropped = x if di else y * c
-                    cost += 0.55 * dropped
-                    if (di and any(a_head[i:ni])) or (dj and any(b_head[j:nj])):
-                        cost += 200.0
-                if base + cost < D[ni][nj]:
-                    D[ni][nj] = base + cost
+                v = base + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
+                if v < D[ni].get(nj, INF):
+                    D[ni][nj] = v
                     B[ni][nj] = (i, j)
 
-    beads, i, j = [], n, m
+    if m not in D[n]:
+        return None, True
+
+    beads, i, j, touched = [], n, m, False
     while (i, j) != (0, 0):
+        if j <= lo[i] or j >= hi[i]:
+            # sitting on the wall: the corridor may have cut off a better route
+            if not (j == 0 and lo[i] == 0) and not (j == m and hi[i] == m):
+                touched = True
         pi, pj = B[i][j]
         beads.append((a_blocks[pi:i], b_blocks[pj:j]))
         i, j = pi, pj
     beads.reverse()
-    return beads
+    return beads, touched
+
+
+def align(a_blocks, b_blocks):
+    """a_blocks/b_blocks: [(tag, html, lang)]. Returns list of (a_slice, b_slice)
+    where each slice is a list of blocks from the respective side.
+
+    The DP runs in a corridor around the diagonal rather than over the whole
+    n x m lattice. On a real pair -- Around the World in Eighty Days at 1666
+    against 2109 paragraphs -- the full matrix cost 420 MB, which is what kept
+    getting this process OOM-killed on a small host. The corridor widens and
+    the pass repeats whenever the chosen path touches its wall, so a book whose
+    two editions really do drift apart still gets the right answer; it just
+    pays for the width it needs.
+    """
+    n, m = len(a_blocks), len(b_blocks)
+    if not n or not m:
+        return [(list(a_blocks), list(b_blocks))] if (n or m) else []
+
+    band = max(64, int(0.08 * max(n, m)))
+    while True:
+        beads, touched = _align_banded(a_blocks, b_blocks, band)
+        if beads is not None and not touched:
+            return beads
+        if band >= m:
+            # already the full lattice; whatever came back is the true optimum
+            return beads if beads is not None else [(list(a_blocks), list(b_blocks))]
+        band = min(band * 2, m)
 
 
 # --------------------------------------------------------------------------- #
