@@ -5,6 +5,7 @@ looking at -- that's the whole point."""
 import html as _html
 import math
 import re
+from array import array
 
 from lxml import etree
 
@@ -149,25 +150,50 @@ def _align_banded(a_blocks, b_blocks, band):
     hi[0] = max(hi[0], 0)
 
     INF = float('inf')
-    D = [dict() for _ in range(n + 1)]
-    B = [dict() for _ in range(n + 1)]
-    D[0][0] = 0.0
+    width = [hi[i] - lo[i] + 1 for i in range(n + 1)]
+
+    # Storage, and why it looks like this. A dict per row costs something like
+    # a hundred bytes a cell, which for The Count of Monte Cristo -- 14512
+    # paragraphs against 4214, so a corridor of 33.7 million cells -- works out
+    # at over 3 GB, and the corridor alone was still enough to get this process
+    # OOM-killed on a 300 MB budget.
+    #
+    # Two things make that fit. Back-pointers are the only part that has to
+    # survive the whole sweep, and one byte holds an index into STEPS, so the
+    # predecessor is recovered by subtraction rather than stored. Costs are
+    # needed no further back than two rows, because no step is taller than
+    # that, so three rows revolve and the rest is thrown away. Same corridor,
+    # same arithmetic, same answer; 33.7 million cells now cost 34 MB.
+    unset = 255
+    back = [bytearray(b'\xff' * w) for w in width]
+    ring = [None, None, None]
+    for k in range(min(3, n + 1)):
+        ring[k % 3] = array('d', [INF]) * width[k]
+    ring[0][0] = 0.0                       # lo[0] is 0, so offset 0 is column 0
+
     for i in range(n + 1):
-        Di = D[i]
-        for j in range(lo[i], hi[i] + 1):
-            base = Di.get(j)
-            if base is None:
+        cur = ring[i % 3]
+        loi = lo[i]
+        for off in range(width[i]):
+            base = cur[off]
+            if base == INF:
                 continue
-            for di, dj in STEPS:
+            j = loi + off
+            for si in range(len(STEPS)):
+                di, dj = STEPS[si]
                 ni, nj = i + di, j + dj
                 if ni > n or nj > m or not (lo[ni] <= nj <= hi[ni]):
                     continue
                 v = base + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
-                if v < D[ni].get(nj, INF):
-                    D[ni][nj] = v
-                    B[ni][nj] = (i, j)
+                row = ring[ni % 3]
+                noff = nj - lo[ni]
+                if v < row[noff]:
+                    row[noff] = v
+                    back[ni][noff] = si
+        # row i is spent; its slot becomes row i+3
+        ring[i % 3] = (array('d', [INF]) * width[i + 3]) if i + 3 <= n else None
 
-    if m not in D[n]:
+    if (n or m) and back[n][m - lo[n]] == unset:
         return None, True
 
     beads, i, j, touched = [], n, m, False
@@ -176,7 +202,11 @@ def _align_banded(a_blocks, b_blocks, band):
             # sitting on the wall: the corridor may have cut off a better route
             if not (j == 0 and lo[i] == 0) and not (j == m and hi[i] == m):
                 touched = True
-        pi, pj = B[i][j]
+        si = back[i][j - lo[i]]
+        if si == unset:
+            return None, True
+        di, dj = STEPS[si]
+        pi, pj = i - di, j - dj
         beads.append((a_blocks[pi:i], b_blocks[pj:j]))
         i, j = pi, pj
     beads.reverse()
@@ -308,57 +338,67 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     hi = [min(m, centre[i] + band) for i in range(n + 1)]
 
     INF = float('inf')
+    width = [hi[i] - lo[i] + 1 for i in range(n + 1)]
 
+    # Flat rows rather than dicts, for the reason given in _align_banded: both
+    # passes have to survive to the end here, so on a long book the dict
+    # version was the largest thing left in the process after the corridor was
+    # fixed. Two arrays of n x 81 doubles is 19 MB where the dicts were 240.
+    #
     # Both passes walk j in a fixed order so that a same-row step -- (0, 1),
     # skipping a target block -- lands on a cell that is already final. An
     # earlier version relaxed out of a snapshot of the row, which silently
     # capped those chains at one step, inflated the forward costs, and produced
     # margins of minus a hundred thousand: an "alternative" cheaper than the
     # optimum, which is arithmetically impossible and was the tell.
-    fwd = [dict() for _ in range(n + 1)]
-    fwd[0][0] = 0.0
+    fwd = [array('d', [INF]) * w for w in width]
+    fwd[0][0 - lo[0]] = 0.0
     for i in range(n + 1):
-        for j in range(lo[i], hi[i] + 1):
-            base = fwd[i].get(j)
-            if base is None:
+        row, loi = fwd[i], lo[i]
+        for off in range(width[i]):
+            base = row[off]
+            if base == INF:
                 continue
+            j = loi + off
             for di, dj in STEPS:
                 ni, nj = i + di, j + dj
                 if ni > n or nj > m or not (lo[ni] <= nj <= hi[ni]):
                     continue
                 v = base + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
-                if v < fwd[ni].get(nj, INF):
-                    fwd[ni][nj] = v
+                nrow, noff = fwd[ni], nj - lo[ni]
+                if v < nrow[noff]:
+                    nrow[noff] = v
 
-    bwd = [dict() for _ in range(n + 1)]
-    bwd[n][m] = 0.0
+    bwd = [array('d', [INF]) * w for w in width]
+    bwd[n][m - lo[n]] = 0.0
     for i in range(n, -1, -1):
-        for j in range(hi[i], lo[i] - 1, -1):
-            best = bwd[i].get(j, INF)
+        row, loi = bwd[i], lo[i]
+        for off in range(width[i] - 1, -1, -1):
+            j = loi + off
+            best = row[off]
             for di, dj in STEPS:
                 ni, nj = i + di, j + dj
-                if ni > n or nj > m:
+                if ni > n or nj > m or not (lo[ni] <= nj <= hi[ni]):
                     continue
-                rest = bwd[ni].get(nj)
-                if rest is None:
+                rest = bwd[ni][nj - lo[ni]]
+                if rest == INF:
                     continue
                 v = rest + _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c)
                 if v < best:
                     best = v
-            if best < INF:
-                bwd[i][j] = best
+            row[off] = best
 
-    best_total = fwd[n].get(m, INF)
+    best_total = fwd[n][m - lo[n]]
     out = []
     for k in range(len(beads)):
         i, j = pts[k + 1]
         alt = INF
-        for jj in range(lo[i], hi[i] + 1):
-            if jj == j:
+        frow, brow, loi = fwd[i], bwd[i], lo[i]
+        for off in range(width[i]):
+            if loi + off == j:
                 continue
-            f = fwd[i].get(jj)
-            b = bwd[i].get(jj)
-            if f is not None and b is not None and f + b < alt:
+            f, b = frow[off], brow[off]
+            if f != INF and b != INF and f + b < alt:
                 alt = f + b
         out.append(INF if alt == INF or best_total == INF else alt - best_total)
     return out
