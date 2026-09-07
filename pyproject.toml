@@ -85,3 +85,6 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: measures memory on a few thousand paragraphs; a few seconds each",
+]
