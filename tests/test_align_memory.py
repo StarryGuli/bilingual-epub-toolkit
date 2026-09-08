@@ -62,17 +62,23 @@ def test_confidence_memory_stays_within_a_small_host():
     assert mb < 20, 'confidence used %.0f MB' % mb
 
 
-def test_memory_grows_with_the_corridor_not_the_square():
-    """Doubling the book must not quadruple the cost.
+@pytest.mark.slow
+def test_the_corridor_costs_a_few_bytes_a_cell():
+    """The one number that matters, stated directly.
 
-    The corridor width itself scales with n, so the true growth is not linear;
-    what this rules out is the full lattice, where 2x the input is 4x the
-    memory. Anything at or under ~3x is corridor-shaped.
+    Growth rate is the wrong thing to assert: the corridor widens with the
+    book, so its cells go up fourfold when the book doubles -- exactly like
+    the full lattice it replaced. The two are not told apart by how fast they
+    grow but by what a cell costs. A dict entry runs to about 200 bytes here;
+    a back-pointer byte plus three revolving rows of cost is single digits.
     """
-    small = synth(700, seed=5), synth(700, seed=6)
-    big = synth(1400, seed=5), synth(1400, seed=6)
-    _s, mb_small = peak_mb(lambda: ae.align(*small))
-    _b, mb_big = peak_mb(lambda: ae.align(*big))
-    assert mb_small > 0.05, 'measurement too small to mean anything'
-    assert mb_big / mb_small < 3.2, \
-        'doubling the book multiplied memory by %.1f' % (mb_big / mb_small)
+    n = 3000
+    a, b = synth(n, seed=7), synth(n, seed=8)
+    _beads, mb = peak_mb(lambda: ae.align(a, b))
+
+    band = max(64, int(0.08 * n))       # mirrors align()'s opening width
+    cells = n * (2 * band + 1)
+    per_cell = mb * 1024 * 1024 / cells
+    assert per_cell < 20, \
+        '%.0f bytes a cell over %.1fM cells; the corridor is holding objects' \
+        % (per_cell, cells / 1e6)

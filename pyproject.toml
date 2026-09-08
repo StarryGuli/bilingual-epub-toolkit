@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bilingual-epub-toolkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Merge two monolingual EPUBs into one tap-to-reveal bilingual EPUB, split bilingual EPUBs back apart, or re-merge with new options."
 readme = "README.md"
 requires-python = ">=3.9"
