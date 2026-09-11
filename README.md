@@ -225,6 +225,21 @@ is supported.
 No EPUB files are included in this repository apart from the generated samples,
 and `*.epub` is gitignored.
 
+## Related projects
+
+[**BookAlign**](https://github.com/ArcadiaLin/bookalign) attacks the same
+pairing problem from the other side: multilingual embeddings (LaBSE) plus
+dynamic programming, comparing what paragraphs *mean* rather than how long they
+are. That reaches the case the table above cannot — a pairing that is wrong but
+unambiguous, where the lengths happen to line up and a length model stays
+confident. It is aimed at novels, particularly Japanese originals against
+Chinese translations, and it runs a review-first workflow rather than one pass
+end to end.
+
+The two are complementary. This one needs no model and runs anywhere; that one
+reads the text, at the cost of a local LaBSE model and realistically a GPU. If
+your two editions differ enough that length alone mispairs them, start there.
+
 ## Development
 
 ```bash
