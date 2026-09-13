@@ -294,6 +294,8 @@ select { appearance: none; cursor: pointer;
 .report-box .rp-email { width: 100%; margin-top: .5rem; }
 .rp-fine { margin: .35rem 0 0; font-size: .76rem; line-height: 1.5;
            color: var(--ink-soft); }
+.report-wrong { margin: .8rem 0 .5rem; font-size: .82rem; line-height: 1.55;
+                color: var(--ink-soft); }
 
 .go {
   appearance: none; border: 0; cursor: pointer;
@@ -535,7 +537,8 @@ const esc = s => String(s).replace(/[&<>"]/g, c =>
    fix a parser bug without handing over what they are reading. */
 function reportUI() {
   if (!L.canReport) return '';
-  return '<button type="button" class="report-open">' + esc(L.reportBtn) + '</button>';
+  return '<p class="report-wrong">' + esc(L.reportWrong) + '</p>' +
+         '<button type="button" class="report-open">' + esc(L.reportBtn) + '</button>';
 }
 
 document.addEventListener('click', async e => {
@@ -562,8 +565,7 @@ document.addEventListener('click', async e => {
 
   if (e.target.closest('.rp-cancel')) {
     const box = e.target.closest('.report-box');
-    box.outerHTML = '<button type="button" class="report-open">' +
-                    esc(L.reportBtn) + '</button>';
+    box.outerHTML = reportUI();
     return;
   }
 
@@ -1030,7 +1032,9 @@ def render_page(cfg=None, page_token='', reports_on=False):
         # the browser needs the ceiling so it can refuse before uploading
         'maxUpload': cfg.max_upload // 1048576,
         'canReport': bool(reports_on),
-        'reportBtn': t('web.report.btn'), 'reportHead': t('web.report.head'),
+        'reportBtn': t('web.report.btn'),
+        'reportWrong': t('web.report.wrong'),
+        'reportHead': t('web.report.head'),
         'reportWhat': t('web.report.what'), 'reportAttach': t('web.report.attach'),
         'reportWhy': t('web.report.why'), 'reportNote': t('web.report.note'),
         'reportEmail': t('web.report.email'),

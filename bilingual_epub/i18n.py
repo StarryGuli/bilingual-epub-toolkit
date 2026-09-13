@@ -481,6 +481,18 @@ STRINGS = {
                           '有 %d 处配对是勉强选出来的，输出里标了 '
                           'data-unsure="1"，人或 agent 只看这些地方就行。'),
     'web.report.btn':    ('Report this failure', '报告这个问题'),
+    #: Shown above the button on every failure, including the ones this tool
+    #: believes it has identified. A confident sentence -- "the download did
+    #: not finish" -- reads as a verdict, and a reader who knows better will
+    #: assume there is nothing to say and go away. The diagnosis is inferred
+    #: from the file's structure and can be wrong; this says so.
+    'web.report.wrong':  ('If that does not match what you are seeing -- the '
+                          'file opens elsewhere, or the reason given is not '
+                          'the right one -- report it. The explanation above '
+                          'is inferred from the file, and can be wrong.',
+                          '如果这与你的实际情况不符——例如文件在别处能正常打开，'
+                          '或给出的原因并不对——请报告。上面的说明是根据文件'
+                          '结构推断的，有可能判断错误。'),
     'web.report.head':   ('Send this to the maintainer?', '把这次失败发给作者？'),
     'web.report.what':   ('What gets sent either way: the error, and the shape of '
                           'your files — how many entries, which parts are present, '

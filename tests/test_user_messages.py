@@ -138,3 +138,45 @@ def test_an_interpolated_label_follows_the_language_too(en_epub, tmp_path):
     assert 'side' not in zh, 'English leaked into the Chinese sentence: %s' % zh
     assert 'A 侧' in zh
     assert 'A side' in en
+
+
+# --------------------------------------------------------------------------- #
+# the way out of a wrong diagnosis
+# --------------------------------------------------------------------------- #
+
+def test_every_failure_offers_a_way_to_disagree():
+    """The report route is not reserved for failures this tool cannot explain.
+
+    A confident sentence reads as a verdict. "The download did not finish" is
+    inferred from the file's structure and is sometimes simply wrong -- the
+    reader may have a book that opens perfectly in their own app -- and if the
+    only invitation to report appears on unrecognised errors, the cases most
+    worth hearing about are the ones that stay silent.
+    """
+    page = _rendered_page()
+    assert 'reportWrong' in page, 'the failure card offers no way to push back'
+    for lang in ('en', 'zh'):
+        i18n.set_lang(lang)
+        text = i18n.t('web.report.wrong')
+        assert text and text != 'web.report.wrong'
+
+
+def test_the_invitation_admits_the_reason_may_be_wrong():
+    for lang, words in (('en', ('wrong', 'report')), ('zh', ('判断错误', '报告'))):
+        i18n.set_lang(lang)
+        text = i18n.t('web.report.wrong')
+        for w in words:
+            assert w in text, '%s (%s) does not admit it may be mistaken' % (w, lang)
+
+
+def _rendered_page():
+    from bilingual_epub import webui
+    return webui.render_page(webui.Config(public=True), 'tok', reports_on=True)
+
+
+def test_the_report_line_is_absent_when_reporting_is_off():
+    from bilingual_epub import webui
+    page = webui.render_page(webui.Config(public=True), 'tok', reports_on=False)
+    assert 'canReport": false' in page or "'canReport': False" in page or \
+        '"canReport":false' in page.replace(' ', ''), \
+        'reporting must be off when no reports directory is configured'
