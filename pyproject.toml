@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bilingual-epub-toolkit"
-version = "0.1.2"
+version = "0.1.3"
 description = "Merge two monolingual EPUBs into one tap-to-reveal bilingual EPUB, split bilingual EPUBs back apart, or re-merge with new options."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -47,6 +47,7 @@ Issues = "https://github.com/StarryGuli/bilingual-epub-toolkit/issues"
 bilingual-epub = "bilingual_epub.cli:main"
 bilingual-epub-tui = "bilingual_epub.tui:main"
 bilingual-epub-web = "bilingual_epub.webui:main"
+bilingual-epub-reports = "bilingual_epub.reportcli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bilingual_epub"]

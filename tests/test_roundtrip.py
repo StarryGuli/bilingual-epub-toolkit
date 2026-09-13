@@ -10,6 +10,7 @@ import zipfile
 import pytest
 
 from bilingual_epub import merge_bilingual, split_by_lang
+from bilingual_epub.errors import UserFacing
 
 
 def read_chapter(epub_path, name='OEBPS/text/ch001.xhtml'):
@@ -240,7 +241,7 @@ def test_opencc_conversion_traditional_to_simplified(en_epub, zh_hant_epub, tmp_
 
 
 def test_missing_file_gives_a_readable_error(fr_epub, tmp_path):
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(UserFacing) as exc:
         merge_bilingual('/nonexistent/nope.epub', fr_epub, str(tmp_path / 'x.epub'))
     assert 'not found' in str(exc.value).lower()
 
@@ -248,7 +249,7 @@ def test_missing_file_gives_a_readable_error(fr_epub, tmp_path):
 def test_non_epub_input_gives_a_readable_error(fr_epub, tmp_path):
     junk = tmp_path / 'junk.epub'
     junk.write_bytes(b'this is definitely not a zip file')
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(UserFacing) as exc:
         merge_bilingual(str(junk), fr_epub, str(tmp_path / 'x.epub'))
     assert 'EPUB' in str(exc.value)
 

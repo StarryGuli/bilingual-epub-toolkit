@@ -85,8 +85,10 @@ def test_scrub_drops_data_paths_but_keeps_source_paths():
     which is usually the book's title. The toolkit's own .py paths are the
     useful half of a traceback and stay."""
     msg = "not a valid EPUB: '/var/tmp/sessions/abc/悲惨世界.epub'"
-    assert '悲惨世界' not in diagnostics.scrub(msg)
-    assert '<path>' in diagnostics.scrub(msg)
+    out = diagnostics.scrub(msg)
+    assert '悲惨世界' not in out
+    # either marker is fine; which rule fired is not the point
+    assert '<path>' in out or '<file>' in out
 
     tb = 'File "/opt/app/lib/bilingual_epub/merge.py", line 12, in merge'
     assert 'merge.py' in diagnostics.scrub(tb), 'source location is the point'
@@ -143,3 +145,50 @@ def test_save_report_skips_files_already_swept(tmp_path):
     saved = json.load(open(os.path.join(reports, rid, 'report.json'),
                            encoding='utf-8'))
     assert saved['attached'] == []
+
+
+# --------------------------------------------------------------------------- #
+# filenames with spaces in them
+#
+# The rest of this file checks that prose and entry names do not survive into
+# a report. These check the case that actually got through: the message named
+# the uploaded file, the path pattern stopped at the first space, and the log
+# kept the title, the author, the translator and the site it came from.
+# --------------------------------------------------------------------------- #
+
+LEAKED = ("不是合法的 EPUB(不是有效的 zip 文件): "
+          "'/tmp/epubmerge_ab12/a/Hippopotamus "
+          "(［英］斯蒂芬·弗莱（Stephen Fry）黄天怡译) "
+          "(z-library.sk, 1lib.sk, z-lib.sk).epub'")
+
+
+def test_a_quoted_book_filename_does_not_survive():
+    out = diagnostics.scrub(LEAKED)
+    for secret in ('Hippopotamus', 'Stephen Fry', '斯蒂芬', '黄天怡',
+                   'z-library.sk', '.epub'):
+        assert secret not in out, '%r survived scrubbing: %s' % (secret, out)
+
+
+def test_an_unquoted_path_with_spaces_does_not_survive():
+    out = diagnostics.scrub('FileNotFoundError: /var/tmp/Ursula K. LeGuin.epub/x.opf')
+    assert 'LeGuin' not in out
+    assert 'FileNotFoundError' in out, 'scrubbing ate the error itself'
+
+
+def test_scrubbing_keeps_the_sentence_around_the_name():
+    out = diagnostics.scrub('ValueError: cannot open /home/a/My Secret Diary.epub')
+    assert out.startswith('ValueError: cannot open')
+    assert 'Secret' not in out
+
+
+def test_source_files_still_name_themselves():
+    line = ('File "/opt/app/venv/lib/python3.11/site-packages/bilingual_epub/'
+            'epub_io.py", line 71, in _find_opf_path')
+    out = diagnostics.scrub(line)
+    assert 'epub_io.py' in out, 'the useful half of a traceback was removed'
+    assert '_find_opf_path' in out
+
+
+def test_ordinary_text_is_left_alone():
+    text = 'No book was found inside this file. Upload the original instead.'
+    assert diagnostics.scrub(text) == text

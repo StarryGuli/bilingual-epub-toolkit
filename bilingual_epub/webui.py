@@ -25,7 +25,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import diagnostics, guard, multipart, samples
 from . import merge as merge_mod
 from . import split as split_mod
+from .errors import UserFacing
 from .i18n import get_lang, set_lang, t
+
+#: Deliberately permissive. The address is only ever used to send one message;
+#: a strict pattern here would reject valid addresses and teach the person
+#: nothing, and delivery is the real test either way.
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$')
 
 HOST, PORT = '127.0.0.1', 8799
 MAX_UPLOAD = 200 * 1024 * 1024      # generous; these are books, not videos
@@ -283,6 +289,11 @@ select { appearance: none; cursor: pointer;
 
 /* ---- button ------------------------------------------------------------ */
 .cf-turnstile { margin: 1rem 0 .2rem; min-height: 1px; }
+.file-note { margin: 0 0 .9rem; font-size: .82rem; line-height: 1.5;
+             color: var(--ink-soft); }
+.report-box .rp-email { width: 100%; margin-top: .5rem; }
+.rp-fine { margin: .35rem 0 0; font-size: .76rem; line-height: 1.5;
+           color: var(--ink-soft); }
 
 .go {
   appearance: none; border: 0; cursor: pointer;
@@ -538,6 +549,9 @@ document.addEventListener('click', async e => {
           '<span>' + esc(L.reportAttach) + '</span></label>' +
         '<p>' + esc(L.reportWhy) + '</p>' +
         '<textarea class="rp-note" placeholder="' + esc(L.reportNote) + '"></textarea>' +
+        '<input type="email" class="rp-email" autocomplete="email" ' +
+          'placeholder="' + esc(L.reportEmail) + '">' +
+        '<p class="rp-fine">' + esc(L.reportEmailWhy) + '</p>' +
         '<div class="acts">' +
           '<button type="button" class="send rp-send">' + esc(L.reportSend) + '</button>' +
           '<button type="button" class="rp-cancel">' + esc(L.reportCancel) + '</button>' +
@@ -565,6 +579,7 @@ document.addEventListener('click', async e => {
         page_token: L.pageToken,
         attach: $('.rp-attach', box).checked,
         note: $('.rp-note', box).value,
+        email: $('.rp-email', box).value,
       }),
     });
     const data = await res.json();
@@ -756,6 +771,11 @@ def _file_field(label, file_name, path_name, placeholder, drop_label=None,
         + tail + '</div>')
 
 
+def _file_note():
+    """Said once, above the two drop zones, rather than after a failure."""
+    return '<p class="file-note">' + t('web.file_note') + '</p>'
+
+
 # Real lines from the sample books in examples/, so the preview shows exactly
 # what the documented one-command demo produces.
 PV_EN = ['Vellmark had four hundred lamps, and Ida lit every one of them.',
@@ -898,6 +918,7 @@ def _merge_panel(cfg, page_token):
         '<form action="/api/merge">'
         '<input type="hidden" name="page_token" value="' + page_token + '">'
         '<div class="panel-body"><div class="main-col">'
+        + _file_note() +
         '<div class="grid">'
         + _file_field(t('web.side.a'), 'a_file', 'a_path', '/path/to/english.epub', cfg=cfg)
         + _file_field(t('web.side.b'), 'b_file', 'b_path', '/path/to/other-language.epub', cfg=cfg)
@@ -1012,6 +1033,8 @@ def render_page(cfg=None, page_token='', reports_on=False):
         'reportBtn': t('web.report.btn'), 'reportHead': t('web.report.head'),
         'reportWhat': t('web.report.what'), 'reportAttach': t('web.report.attach'),
         'reportWhy': t('web.report.why'), 'reportNote': t('web.report.note'),
+        'reportEmail': t('web.report.email'),
+        'reportEmailWhy': t('web.report.email_why'),
         'reportSend': t('web.report.send'), 'reportCancel': t('web.report.cancel'),
         'reportOk': t('web.report.ok'), 'reportNoFiles': t('web.report.nofiles'),
         'pageToken': page_token,
@@ -1205,9 +1228,19 @@ class Handler(BaseHTTPRequestHandler):
         if not held:
             self._json({'ok': False, 'error': t('web.report.gone')}, status=409)
             return
+        email = str(body.get('email') or '').strip()[:200]
+        if email and not _EMAIL_RE.match(email):
+            self._json({'ok': False, 'error': t('web.report.bademail')},
+                       status=400)
+            return
+
         report, files = held
         report = dict(report, note=str(body.get('note') or '')[:2000],
                       user_agent=self.headers.get('User-Agent', '')[:300])
+        # only present when the person typed one; absent keys are easier to
+        # reason about later than empty strings that look like addresses
+        if email:
+            report['notify'] = email
 
         attach = bool(body.get('attach'))
         available = [p for p in files if p and os.path.exists(p)]
@@ -1345,10 +1378,16 @@ class Handler(BaseHTTPRequestHandler):
                 payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
                 payload['log'] = buf.getvalue().strip()
                 payload['ok'] = True
-            except SystemExit as e:
+            except (UserFacing, SystemExit) as e:
                 # these carry a message written for a person to read -- but not
                 # the server-side path they happened to mention, which is a
-                # temp directory and a session id the reader has no use for
+                # temp directory and a session id the reader has no use for.
+                #
+                # UserFacing belongs here and not below: a book that is merely
+                # zipped twice is not a crash, and telling its owner to go and
+                # read a terminal on someone else's server told them nothing
+                # they could act on. Everything that is genuinely a defect
+                # still falls through to the generic reply.
                 payload = {'ok': False, 'error': diagnostics.scrub(str(e))}
                 self._log_failure(route, e)
             except Exception as e:

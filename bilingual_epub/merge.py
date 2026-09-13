@@ -11,6 +11,7 @@ import tempfile
 
 from . import align_engine as ae
 from . import epub_io
+from .errors import UserFacing
 
 try:
     import opencc
@@ -225,9 +226,9 @@ def merge_bilingual(a_epub, b_epub, out_path, workdir=None, blur='0.25em',
         for p in docB.spine_doc_paths():
             b_blocks += ae.parse_blocks(p, lang=lang_b)
         if not a_blocks:
-            raise SystemExit('A 侧 EPUB 提取不到任何正文段落，检查文件是否有效/是否加了 DRM: %s' % a_epub)
+            raise UserFacing('err.no_text', 'web.side.a')
         if not b_blocks:
-            raise SystemExit('B 侧 EPUB 提取不到任何正文段落，检查文件是否有效/是否加了 DRM: %s' % b_epub)
+            raise UserFacing('err.no_text', 'web.side.b')
 
         beads = ae.align(a_blocks, b_blocks)
         # which of those pairings the aligner nearly got wrong; the set is

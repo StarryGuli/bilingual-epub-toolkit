@@ -287,11 +287,20 @@ STRINGS = {
                           'one step.',
                           '已经有一本双语书，想换个模糊程度、换糊哪一侧，或者把别处来的'
                           '双语书转成这个工具的点按显示风格——先拆再合，这里一步完成。'),
+    'web.the_file':      ('uploaded file', '上传的文件'),
     'web.side.a':        ('A side (original)', 'A 侧（原文）'),
     'web.side.b':        ('B side (translation)', 'B 侧（译文）'),
     'web.drop':          ('Drop an EPUB here', '拖一本 EPUB 到这里'),
     'web.drop.sub':      ('or click to choose', '或点击选择'),
     'web.drop.or_path':  ('or give a path on this machine', '或填本机路径'),
+    #: Shown before anything is uploaded. Both halves are there because each
+    #: answers a failure that actually reached the hosted instance: an archive
+    #: produced by compressing an unpacked book, and a file bought with DRM.
+    'web.file_note':     ('Upload the .epub file itself. An archive containing '
+                          'a book is also accepted. Files protected by DRM '
+                          'cannot be read by any tool of this kind.',
+                          '请上传 .epub 文件本身；包含书籍的压缩包同样可以处理。'
+                          '带有 DRM 保护的文件无法被此类工具读取。'),
     'web.uploaded':      ('will be uploaded to the local server', '会上传到本机服务器'),
     'web.clear':         ('Clear the selected file', '清除所选文件'),
     'web.tap.enable':    ('Tap to reveal', '点按显示'),
@@ -366,9 +375,50 @@ STRINGS = {
                           'behaves the same way',
                           '点一下糊住的那行就会显示 —— 做出来的书就是这个行为'),
     'web.pv.download':   ('download', '下载'),
-    'web.crashed':       ('Something went wrong handling that file. The details '
-                          'are in the terminal running this server.',
-                          '处理这个文件时出错了。详细报错在跑这个服务的终端窗口里。'),
+    'web.crashed':       ('This file could not be processed, and the cause is '
+                          'not one we recognise. The failure has been recorded. '
+                          'To have it looked at, use "Report this failure" below.',
+                          '无法处理这个文件，原因尚未被识别。该失败已被记录。'
+                          '如需我们跟进，请使用下方的「报告失败」。'),
+
+    # ---- what a reader is told when their file cannot be used ------------
+    #
+    # These are the messages a person actually meets, so they name the cause
+    # in ordinary words and say what to do next. They deliberately avoid file
+    # paths, exception names and EPUB internals: "META-INF/container.xml is
+    # missing" is true, and is of no use whatsoever to someone who has simply
+    # been handed a book by a shop.
+    'err.not_epub':      ('This file could not be opened as an EPUB. The usual '
+                          'causes are a download that did not finish and a file '
+                          'protected by DRM. Download it again, and check that '
+                          'it opens in your normal reading app.',
+                          '这个文件无法作为 EPUB 打开。常见原因是下载未完成，'
+                          '或文件带有 DRM 保护。请重新下载，并确认它能在你'
+                          '平常使用的阅读软件中打开。'),
+    'err.no_book_in':    ('No book was found inside this file. If you compressed '
+                          'a folder, upload the original .epub file instead of '
+                          'the archive.',
+                          '在这个文件中没有找到书籍内容。如果你压缩的是一个'
+                          '文件夹，请直接上传原始的 .epub 文件，而不是压缩包。'),
+    'err.many_books':    ('This archive contains %d books. Please upload one book '
+                          'on each side.',
+                          '这个压缩包中包含 %d 本书。每一侧请上传一本。'),
+    'err.damaged_index': ('This book\'s index is damaged and does not point to any '
+                          'content. Downloading the file again usually resolves '
+                          'this.',
+                          '这本书的索引已损坏，未指向任何内容。重新下载该文件'
+                          '通常可以解决。'),
+    'err.no_order':      ('This book does not declare a reading order, so its '
+                          'chapters cannot be placed. The file is most likely '
+                          'damaged; try downloading it again.',
+                          '这本书没有声明阅读顺序，因此无法确定章节次序。'
+                          '文件很可能已损坏，建议重新下载。'),
+    'err.no_text':       ('No text could be read from the %s. This normally means '
+                          'the file is protected by DRM, or its pages are stored '
+                          'as images rather than as text.',
+                          '无法从%s读取到任何正文。这通常意味着文件带有 DRM '
+                          '保护，或其页面是以图片而非文字的形式存储的。'),
+    'err.missing_file':  ('File not found: %s', '找不到文件：%s'),
     'web.no_session':    ('Your session expired. Reload the page and try again.',
                           '会话已过期，刷新页面重试。'),
     'web.stale_page':    ('This page is out of date. Reload it and try again.',
@@ -444,6 +494,20 @@ STRINGS = {
                           '有些问题不拿到原文件就复现不了。文件只用于修这个 bug，'
                           '修完即删。书不方便外传就别勾。'),
     'web.report.note':   ('Anything you want to add (optional)', '想补充点什么（可选）'),
+    'web.report.email':  ('Email address (optional)', '邮箱地址（可选）'),
+    #: Stated at the point of collection, because that is where consent is
+    #: given. The promise is narrow on purpose and the code keeps it: the
+    #: address is written to the report, used once to say the case is closed,
+    #: and removed with it.
+    'web.report.email_why': ('Used once, to tell you when this particular '
+                             'failure has been fixed. It is stored with the '
+                             'report, is not used for anything else, and is '
+                             'deleted when the report is.',
+                             '仅用于在这个问题修复后通知你一次。它与报告一同'
+                             '保存，不作任何其他用途，并随报告一起删除。'),
+    'web.report.bademail': ('That does not look like an email address. Correct '
+                            'it, or leave it empty.',
+                            '这看起来不像一个邮箱地址。请更正，或留空。'),
     'web.report.send':   ('Send report', '发送'),
     'web.report.cancel': ('Cancel', '取消'),
     'web.report.ok':     ('Sent. Reference %s — quote it if you follow up.',

@@ -87,13 +87,41 @@ def fingerprint(path, max_entries=40):
 #: the code lives".
 _PATHS = re.compile(r"(?:/[^\s'\"/]+)+/?")
 
+#: Book filenames contain spaces, and the pattern above stops at the first
+#: one. That is not a small gap: a real line in the hosted log read
+#:
+#:   ... EPUB: '<path> (［英］斯蒂芬·弗莱（Stephen Fry）黄天怡译) (z-library.sk).epub'
+#:
+#: -- the directory redacted and the title, the author, the translator and
+#: the site it was taken from all still there, in a file whose entire purpose
+#: is to hold nothing of the kind. So anything ending in a data extension is
+#: removed whole, spaces included. Source files keep their names, because a
+#: traceback through this package is the useful part of a report.
+_DATA_EXT = r'epub|zip|xhtml|html|htm|opf|ncx|jpe?g|png|gif|css|ttf|otf|txt|json'
+_QUOTED_FILE = re.compile(
+    r"""(['"])((?:(?!\1).)*?\.(?:%s))\1""" % _DATA_EXT, re.IGNORECASE)
+#: Anchored at a slash, and stopping at a colon, so that it takes a path and
+#: not the sentence around it: an earlier version matched backwards through
+#: spaces until it had eaten "ValueError: cannot open" along with the name.
+_BARE_FILE = re.compile(
+    r"""/[^\s'":]*(?:[ \t][^\s'":]+)*\.(?:%s)\b""" % _DATA_EXT, re.IGNORECASE)
+
 
 def scrub(text):
-    """Remove filesystem paths that could name a user's file."""
-    def repl(m):
+    """Remove anything that could name a user's file.
+
+    Three passes, narrowest first: quoted filenames, bare filenames with
+    spaces in them, then ordinary paths. Each is redundant with the others on
+    some inputs and the only one that fires on others.
+    """
+    def path_repl(m):
         p = m.group()
         return p if p.endswith('.py') else '<path>'
-    return _PATHS.sub(repl, text or '')
+
+    text = text or ''
+    text = _QUOTED_FILE.sub(lambda m: m.group(1) + '<file>' + m.group(1), text)
+    text = _BARE_FILE.sub('<file>', text)
+    return _PATHS.sub(path_repl, text)
 
 
 def record(log_path, endpoint, error, inputs=(), extra=None):

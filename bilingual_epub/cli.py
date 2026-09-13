@@ -30,6 +30,7 @@ import sys
 from . import merge as merge_mod
 from . import split as split_mod
 from . import textio
+from .errors import UserFacing
 from .i18n import set_lang, t
 
 
@@ -239,7 +240,13 @@ def main(argv=None):
     # --no-blur is the plain-language spelling of --blur-side none
     if getattr(args, 'no_blur', False):
         args.blur_side = 'none'
-    args.func(args)
+    try:
+        args.func(args)
+    except UserFacing as e:
+        # a problem with the file, not with this program: print the sentence
+        # written for the reader and stop, rather than showing them a
+        # traceback through code they did not write
+        raise SystemExit(str(e)) from None
 
 
 if __name__ == '__main__':

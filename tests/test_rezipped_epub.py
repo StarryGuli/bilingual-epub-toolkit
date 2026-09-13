@@ -15,6 +15,7 @@ import zipfile
 import pytest
 
 from bilingual_epub import epub_io, merge_bilingual
+from bilingual_epub.errors import UserFacing
 
 
 def rewrap(src, dest, prefix, macosx=True, depth=1):
@@ -80,7 +81,7 @@ def test_two_books_in_one_archive_is_refused_not_guessed(en_epub, fr_epub,
             with zipfile.ZipFile(src) as zin:
                 for name in zin.namelist():
                     zout.writestr('%s/%s' % (prefix, name), zin.read(name))
-    with pytest.raises(ValueError, match='2 本书'):
+    with pytest.raises(UserFacing, match='2'):
         epub_io.load(str(both), str(tmp_path / 'x'))
 
 
@@ -88,5 +89,8 @@ def test_a_zip_that_is_not_a_book_still_reports_clearly(tmp_path):
     junk = tmp_path / 'junk.zip'
     with zipfile.ZipFile(junk, 'w') as z:
         z.writestr('notes/todo.txt', 'nothing to see')
-    with pytest.raises(ValueError, match='META-INF'):
+    with pytest.raises(UserFacing) as exc:
         epub_io.load(str(junk), str(tmp_path / 'x'))
+    # the message names what to do, not what is missing from the container
+    assert 'META-INF' not in str(exc.value)
+    assert '.epub' in str(exc.value)

@@ -15,6 +15,7 @@ import uuid
 
 from . import align_engine as ae
 from . import epub_io
+from .errors import UserFacing
 
 PAGE = '''<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -49,9 +50,9 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
         for p in doc.spine_doc_paths():
             blocks += ae.parse_blocks(p, lang=book_lang)
         if not blocks:
-            raise SystemExit('提取不到任何正文段落，检查文件是否有效/是否加了 DRM: %s' % epub_path)
+            raise UserFacing('err.no_text', 'web.the_file')
 
-        found = list(dict.fromkeys(lang or 'und' for _t, _f, lang in blocks))
+        found = list(dict.fromkeys(lang or 'und' for _tag, _frag, lang in blocks))
         keep = langs or found
         cover_bytes = None
         cp = doc.cover_path()
@@ -63,7 +64,8 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
         base = re.sub(r'[^\w.-]+', '_', os.path.splitext(os.path.basename(epub_path))[0])
         results = {}
         for lang in keep:
-            lang_blocks = [(t, f, lg) for t, f, lg in blocks if (lg or 'und') == lang]
+            lang_blocks = [(tag, frag, lg) for tag, frag, lg in blocks
+                           if (lg or 'und') == lang]
             if not lang_blocks:
                 continue
             level = ae.pick_level_single(lang_blocks)
@@ -77,8 +79,8 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
                 # `title` (used below only for the <title>/nav label) -- don't
                 # also render it as a separate <h1>, or it shows up twice.
                 for tag, frag, _l in ch_blocks:
-                    t = 'h2' if tag.startswith('h') else 'p'
-                    body.append('<%s lang="%s">%s</%s>' % (t, lang, frag, t))
+                    el = 'h2' if tag.startswith('h') else 'p'
+                    body.append('<%s lang="%s">%s</%s>' % (el, lang, frag, el))
                 xhtml = PAGE % {'title': re.sub(r'<[^>]+>', '', title or ('Chapter %d' % idx)),
                                 'header': '', 'body': '\n'.join(body)}
                 nav_title = re.sub(r'<[^>]+>', '', title or ('Chapter %d' % idx))

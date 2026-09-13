@@ -12,6 +12,8 @@ import zipfile
 
 from lxml import etree
 
+from .errors import UserFacing
+
 XH = '{http://www.w3.org/1999/xhtml}'
 
 
@@ -52,7 +54,7 @@ class EpubDoc:
 
 def extract_epub(epub_path, dest_dir):
     if not epub_path or not os.path.exists(epub_path):
-        raise SystemExit('EPUB not found: %r' % epub_path)
+        raise UserFacing('err.missing_file', epub_path)
     if os.path.isdir(dest_dir):
         shutil.rmtree(dest_dir)
     os.makedirs(dest_dir)
@@ -60,8 +62,7 @@ def extract_epub(epub_path, dest_dir):
         with zipfile.ZipFile(epub_path) as zf:
             zf.extractall(dest_dir)
     except zipfile.BadZipFile as err:
-        raise SystemExit('不是合法的 EPUB(不是有效的 zip 文件，可能是下载不完整或带了 DRM): %r'
-                         % epub_path) from err
+        raise UserFacing('err.not_epub') from err
     return dest_dir
 
 
@@ -105,14 +106,14 @@ def _epub_root(extracted_dir, max_depth=3):
     shallowest = min(d for d, _ in found)
     roots = [c for d, c in found if d == shallowest]
     if len(roots) > 1:
-        raise ValueError('这个压缩包里有 %d 本书，请分别上传单本 EPUB' % len(roots))
+        raise UserFacing('err.many_books', len(roots))
     return roots[0]
 
 
 def _find_opf_path(extracted_dir):
     extracted_dir = _epub_root(extracted_dir)
     if extracted_dir is None:
-        raise ValueError('不是合法 EPUB：缺 META-INF/container.xml')
+        raise UserFacing('err.no_book_in')
     container = os.path.join(extracted_dir, 'META-INF', 'container.xml')
     parser = etree.XMLParser(recover=True)
     root = etree.parse(container, parser).getroot()
@@ -121,7 +122,7 @@ def _find_opf_path(extracted_dir):
             full_path = el.get('full-path')
             if full_path:
                 return os.path.join(extracted_dir, full_path)
-    raise ValueError('container.xml 里没有 rootfile')
+    raise UserFacing('err.damaged_index')
 
 
 def load(epub_path, extract_to):
@@ -178,7 +179,7 @@ def load(epub_path, extract_to):
                     cover_id = m.get('content')
 
     if not spine_ids:
-        raise ValueError('EPUB 的 OPF 里没有 <spine> 条目，读不出正文顺序: %s' % epub_path)
+        raise UserFacing('err.no_order')
 
     cover_href = None
     for info in manifest.values():
