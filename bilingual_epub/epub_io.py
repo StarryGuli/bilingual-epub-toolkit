@@ -65,10 +65,55 @@ def extract_epub(epub_path, dest_dir):
     return dest_dir
 
 
+#: Sidecars that macOS writes into an archive. They mirror the real tree, so
+#: a search for the book's root will happily find them if they aren't skipped.
+_ARCHIVE_JUNK = {'__MACOSX'}
+
+
+def _epub_root(extracted_dir, max_depth=3):
+    """Where the EPUB actually begins inside the extracted tree.
+
+    A standard EPUB begins at the root, and that case costs nothing here. The
+    case this exists for is a book that was unzipped and zipped again: macOS
+    expands an .epub on download if the server sends it as a generic archive,
+    and compressing the resulting folder produces a zip whose entries all sit
+    under one directory, with a __MACOSX sidecar beside it. The book inside is
+    perfectly valid -- only the extra layer is wrong -- so the fix is to find
+    META-INF rather than to reject the upload. Two real reports on the hosted
+    instance were this and nothing else.
+
+    Returns None when no container.xml is anywhere in range, and raises when
+    the archive holds more than one book, which is not something to guess at.
+    """
+    if os.path.isfile(os.path.join(extracted_dir, 'META-INF', 'container.xml')):
+        return extracted_dir
+
+    found = []
+    for cur, dirs, _files in os.walk(extracted_dir):
+        dirs[:] = [d for d in dirs
+                   if d not in _ARCHIVE_JUNK and not d.startswith('.')]
+        rel = os.path.relpath(cur, extracted_dir)
+        depth = 0 if rel == os.curdir else rel.count(os.sep) + 1
+        if depth > max_depth:
+            dirs[:] = []
+            continue
+        if os.path.isfile(os.path.join(cur, 'META-INF', 'container.xml')):
+            found.append((depth, cur))
+
+    if not found:
+        return None
+    shallowest = min(d for d, _ in found)
+    roots = [c for d, c in found if d == shallowest]
+    if len(roots) > 1:
+        raise ValueError('这个压缩包里有 %d 本书，请分别上传单本 EPUB' % len(roots))
+    return roots[0]
+
+
 def _find_opf_path(extracted_dir):
+    extracted_dir = _epub_root(extracted_dir)
+    if extracted_dir is None:
+        raise ValueError('不是合法 EPUB：缺 META-INF/container.xml')
     container = os.path.join(extracted_dir, 'META-INF', 'container.xml')
-    if not os.path.exists(container):
-        raise ValueError('不是合法 EPUB：缺 META-INF/container.xml (%s)' % extracted_dir)
     parser = etree.XMLParser(recover=True)
     root = etree.parse(container, parser).getroot()
     for el in root.iter():
