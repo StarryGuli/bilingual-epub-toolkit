@@ -1,0 +1,28 @@
+# One look at what has been failing, mailed if there is anything to say.
+#
+# Paired with the .timer beside it. Run by hand first to see the shape of it:
+#   bilingual-epub-reports digest --since 7d
+#
+# --quiet-when-idle is what keeps this readable: no mail on a night when
+# nothing failed and nothing new was reported. Cases that are merely still
+# open do not count as news, or the same three would arrive every night.
+[Unit]
+Description=Bilingual EPUB Toolkit: daily failure digest
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=bilingual
+Environment=BILINGUAL_EPUB_LOG=/var/log/bilingual-epub/failures.jsonl
+Environment=BILINGUAL_EPUB_REPORTS=/var/lib/bilingual-epub/reports
+# set this to where the digest should go, then: systemctl daemon-reload
+Environment=BILINGUAL_EPUB_TO=
+ExecStart=/opt/bilingual-epub/venv/bin/bilingual-epub-reports digest \
+    --since 1d --quiet-when-idle
+
+# it reads two directories and sends mail; it has no business anywhere else
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/log/bilingual-epub /var/lib/bilingual-epub

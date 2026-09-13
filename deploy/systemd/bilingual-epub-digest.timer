@@ -1,0 +1,13 @@
+# Nightly, off-peak, and not on the minute -- a fixed time across many hosts
+# is how you build a thundering herd out of a cron entry.
+[Unit]
+Description=Bilingual EPUB Toolkit: daily failure digest
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=30m
+# if the machine was asleep or down at 04:00, run once it is back
+Persistent=true
+
+[Install]
+WantedBy=timers.target
