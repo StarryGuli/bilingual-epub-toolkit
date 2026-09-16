@@ -5,9 +5,12 @@ looking at -- that's the whole point."""
 import html as _html
 import math
 import re
+import sys
 from array import array
 
 from lxml import etree
+
+from .errors import UserFacing
 
 XH = '{http://www.w3.org/1999/xhtml}'
 
@@ -230,6 +233,26 @@ def align(a_blocks, b_blocks):
         return [(list(a_blocks), list(b_blocks))] if (n or m) else []
 
     band = max(64, int(0.08 * max(n, m)))
+
+    # A breadcrumb, and a ceiling.
+    #
+    # The corridor holds one byte a cell, so its cost is n * (2 * band + 1)
+    # and band grows with the book: The Count of Monte Cristo, at 14512
+    # paragraphs against 4214, needs 34 MB, and a pair twice that needs rather
+    # more than four times as much. Past some size the host dies, and a job
+    # killed by the kernel writes no failure record, leaves no report, and
+    # tells its reader nothing -- one did exactly that, and there is no way to
+    # know now what book it was.
+    #
+    # So the size goes to the log before the expensive part rather than after,
+    # where a kill cannot erase it, and a job too large to survive is refused
+    # while there is still someone to refuse it to.
+    cells = n * (2 * band + 1)
+    sys.stderr.write('align: %d x %d blocks, corridor %.0f MB\n'
+                     % (n, m, cells / 1048576.0))
+    sys.stderr.flush()
+    if cells > MAX_CORRIDOR_BYTES:
+        raise UserFacing('err.too_big', n, m)
     while True:
         beads, touched = _align_banded(a_blocks, b_blocks, band)
         if beads is not None and not touched:
@@ -302,6 +325,12 @@ def _step_cost(i, j, di, dj, a_len, b_len, a_head, b_head, c):
 
 STEPS = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)]
 
+#: What one alignment may spend on its corridor. Chosen against the deploy
+#: host's 300 MB: Monte Cristo fits in 34 MB and the whole job peaks at 67, so
+#: this leaves room for a book several times longer while still refusing the
+#: ones that would take the process down.
+MAX_CORRIDOR_BYTES = 160 * 1024 * 1024
+
 
 def _path_points(beads):
     """The lattice points the optimal path passes through."""
@@ -325,17 +354,33 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     a_len, b_len, a_head, b_head, c = _prep(a_blocks, b_blocks)
     pts = _path_points(beads)
 
-    # the band: for each i, the range of j worth considering
-    on_path = {}
+    # The band: for each i, the range of j worth considering. It has to
+    # contain the whole optimal path, because the margin is measured against
+    # it -- an alternative cannot be compared with an optimum that is not
+    # there.
+    #
+    # A row is not a single point. Where one side has far less text than the
+    # other -- a picture book against a prose translation -- the path runs
+    # sideways along a single row for as far as it needs to, and taking that
+    # row's first j as its centre leaves the rest of the run outside. On a
+    # real pair that ran 69 columns along the final row, 40 of which were
+    # covered, and the write of the endpoint at (n, m) landed past the end of
+    # its array: two users, one IndexError, no margins at all.
+    #
+    # So each row is bracketed by where the path enters and leaves it, and
+    # the band is added on either side of that. Rows the path never touches
+    # carry the last bracket forward.
+    first, final = {}, {}
     for i, j in pts:
-        on_path.setdefault(i, j)
-    last = 0
-    centre = []
+        first.setdefault(i, j)
+        final[i] = j
+    lo, hi = [], []
+    enter = leave = 0
     for i in range(n + 1):
-        last = on_path.get(i, last)
-        centre.append(last)
-    lo = [max(0, centre[i] - band) for i in range(n + 1)]
-    hi = [min(m, centre[i] + band) for i in range(n + 1)]
+        enter = first.get(i, leave)
+        leave = final.get(i, leave)
+        lo.append(max(0, enter - band))
+        hi.append(min(m, leave + band))
 
     INF = float('inf')
     width = [hi[i] - lo[i] + 1 for i in range(n + 1)]

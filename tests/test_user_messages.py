@@ -180,3 +180,26 @@ def test_the_report_line_is_absent_when_reporting_is_off():
     assert 'canReport": false' in page or "'canReport': False" in page or \
         '"canReport":false' in page.replace(' ', ''), \
         'reporting must be off when no reports directory is configured'
+
+
+def test_the_converter_message_matches_who_is_reading_it(monkeypatch):
+    """A hosted reader cannot run pip on someone else's server.
+
+    Reached live: a page that offers simplified/traditional conversion, on a
+    server without the converter installed, answered a reader with
+    "pip3 install opencc-python-reimplemented".
+    """
+    from bilingual_epub import merge as merge_mod
+    monkeypatch.setattr(merge_mod, 'opencc', None)
+    i18n.set_lang('zh')
+
+    monkeypatch.setenv('BILINGUAL_EPUB_HOSTED', '1')
+    with pytest.raises(UserFacing) as hosted:
+        merge_mod._cc('s2t')
+    assert 'pip' not in str(hosted.value)
+    assert '不转换' in str(hosted.value), 'no way forward was offered'
+
+    monkeypatch.delenv('BILINGUAL_EPUB_HOSTED')
+    with pytest.raises(UserFacing) as local:
+        merge_mod._cc('s2t')
+    assert 'pip install' in str(local.value), 'the terminal should say what to install'

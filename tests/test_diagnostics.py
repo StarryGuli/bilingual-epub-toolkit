@@ -192,3 +192,26 @@ def test_source_files_still_name_themselves():
 def test_ordinary_text_is_left_alone():
     text = 'No book was found inside this file. Upload the original instead.'
     assert diagnostics.scrub(text) == text
+
+
+def test_scrubbing_does_not_eat_an_a_slash_b_in_prose():
+    """A live message read "A<path> 必须从里面选" three times before this.
+
+    The path pattern matched the "/B" of "A/B". Scrubbing exists to remove
+    what should not be in a log; damaging the sentence around it is a
+    different failure, and one the reader sees.
+    """
+    from bilingual_epub import i18n
+    before = i18n.get_lang()
+    try:
+        i18n.set_lang('zh')
+        msg = i18n.t('web.pick_from', 'it, zh')
+        assert 'A/B' in msg, 'fixture no longer exercises the case'
+        assert diagnostics.scrub(msg) == msg
+    finally:
+        i18n.set_lang(before)
+
+
+def test_a_real_path_is_still_removed():
+    assert '<path>' in diagnostics.scrub('workdir /tmp/epubmerge_ab12 cleaned')
+    assert 'epubmerge_ab12' not in diagnostics.scrub('workdir /tmp/epubmerge_ab12 cleaned')

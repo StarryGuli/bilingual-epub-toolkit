@@ -85,7 +85,12 @@ def fingerprint(path, max_entries=40):
 #: in .py are the toolkit's own source and are the most useful part of a
 #: traceback, so they stay: the rule is "drop where the data lives, keep where
 #: the code lives".
-_PATHS = re.compile(r"(?:/[^\s'\"/]+)+/?")
+#: Two segments at least. With one, this matched the "/B" in "A/B 必须从里面
+#: 选" and showed three people "A<path> 必须从里面选" -- scrubbing is meant to
+#: remove what should not be there, not to damage the sentence around it. A
+#: bare "/etc" now survives, which is a trade worth making: nothing a reader
+#: uploaded is ever one segment deep.
+_PATHS = re.compile(r"(?:/[^\s'\"/]+){2,}/?")
 
 #: Book filenames contain spaces, and the pattern above stops at the first
 #: one. That is not a small gap: a real line in the hosted log read

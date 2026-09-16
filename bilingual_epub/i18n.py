@@ -419,6 +419,32 @@ STRINGS = {
                           '无法从%s读取到任何正文。这通常意味着文件带有 DRM '
                           '保护，或其页面是以图片而非文字的形式存储的。'),
     'err.missing_file':  ('File not found: %s', '找不到文件：%s'),
+    #: Two readers, two situations. Someone running this themselves can
+    #: install the converter; someone using a hosted page cannot, and telling
+    #: them to run pip is telling them to fix a machine they have no access
+    #: to. So the sentence names the setting they chose and how to proceed
+    #: without it, and the install line is added only when it is theirs to do.
+    #: A job large enough to exhaust the host dies without leaving a record,
+    #: because the process is killed before anything can be written. Refusing
+    #: it in advance is the only way the reader gets told anything at all --
+    #: and the local install has no such ceiling, so there is somewhere to go.
+    'err.too_big':       ('This pair is too large for the hosted service: '
+                          '%d and %d paragraphs. Install the toolkit and run '
+                          'it on your own machine -- pip install '
+                          'bilingual-epub-toolkit -- where there is no memory '
+                          'limit.',
+                          '这一对书对在线服务来说太大了：%d 段和 %d 段。'
+                          '请在本机安装后运行（pip install '
+                          'bilingual-epub-toolkit），本机没有这个内存上限。'),
+    'err.no_opencc':     ('Simplified/traditional conversion is not available '
+                          'on this server. Set the conversion option back to '
+                          '"no conversion" and the merge will run.',
+                          '这台服务器上没有可用的简繁转换。把转换选项改回'
+                          '「不转换」即可继续合并。'),
+    'err.no_opencc_cli': ('Simplified/traditional conversion needs an extra '
+                          'package: pip install opencc-python-reimplemented',
+                          '简繁转换需要一个额外的包：'
+                          'pip install opencc-python-reimplemented'),
     'web.no_session':    ('Your session expired. Reload the page and try again.',
                           '会话已过期，刷新页面重试。'),
     'web.stale_page':    ('This page is out of date. Reload it and try again.',

@@ -1487,6 +1487,10 @@ def main():
     cfg = Config(public=args.public, ttl=args.ttl,
                  turnstile=guard.Turnstile(args.turnstile_sitekey,
                                            args.turnstile_secret))
+    # the engine words a few messages differently when the reader is not the
+    # person who can install things on this machine
+    if args.public:
+        os.environ['BILINGUAL_EPUB_HOSTED'] = '1'
     host = args.host or ('0.0.0.0' if args.public else HOST)  # noqa: S104
 
     srv, port = None, args.port

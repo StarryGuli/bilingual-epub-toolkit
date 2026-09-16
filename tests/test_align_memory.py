@@ -82,3 +82,41 @@ def test_the_corridor_costs_a_few_bytes_a_cell():
     assert per_cell < 20, \
         '%.0f bytes a cell over %.1fM cells; the corridor is holding objects' \
         % (per_cell, cells / 1e6)
+
+
+def test_a_job_too_large_is_refused_rather_than_fatal():
+    """A kernel kill writes no record, sends no reply and leaves no report.
+
+    One did exactly that on the hosted instance, and there is no way to know
+    now which book it was. Refusing in advance is the only point at which
+    there is still someone to tell.
+    """
+    from bilingual_epub.errors import UserFacing
+
+    huge = ae.MAX_CORRIDOR_BYTES
+    n = int((huge / 0.16) ** 0.5) + 5000     # comfortably past the ceiling
+    a = [('p', 'x', 'l')] * n
+    b = [('p', 'x', 'l')] * n
+    with pytest.raises(UserFacing) as exc:
+        ae.align(a, b)
+    text = str(exc.value)
+    assert str(n) in text, 'the reader is not told how large their book is'
+    assert 'pip install' in text, 'no route offered for a book this size'
+
+
+def test_a_normal_book_is_nowhere_near_the_ceiling():
+    """The ceiling must not be reachable by anything ordinary. Monte Cristo,
+    at 14512 paragraphs against 4214, needs about 34 MB."""
+    n, m = 14512, 4214
+    band = max(64, int(0.08 * max(n, m)))
+    assert n * (2 * band + 1) < ae.MAX_CORRIDOR_BYTES / 4, \
+        'the longest book tested should sit well under the limit'
+
+
+def test_the_size_is_logged_before_the_expensive_part(capsys):
+    """Written to stderr, which the journal keeps, so the next kill is
+    attributable to a book rather than a mystery."""
+    a, b = synth(200, seed=11), synth(200, seed=12)
+    ae.align(a, b)
+    err = capsys.readouterr().err
+    assert 'align: 200 x 200 blocks' in err, err

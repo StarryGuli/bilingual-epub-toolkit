@@ -107,11 +107,20 @@ JS = '''(function () {
 '''
 
 
+def _hosted():
+    """True when this is running as someone else's web service.
+
+    The web interface sets it. Nothing else does, so the terminal keeps the
+    message that tells you what to install.
+    """
+    return os.environ.get('BILINGUAL_EPUB_HOSTED') == '1'
+
+
 def _cc(config):
     if not config or config == 'none':
         return _Identity()
     if opencc is None:
-        raise SystemExit('--convert 需要 opencc-python-reimplemented，未安装: pip3 install opencc-python-reimplemented')
+        raise UserFacing('err.no_opencc' if _hosted() else 'err.no_opencc_cli')
     return opencc.OpenCC(config)
 
 

@@ -124,3 +124,61 @@ def test_merge_reports_an_unsure_column(en_epub, fr_epub, tmp_path):
     _o, stats = merge_bilingual(en_epub, fr_epub, out)
     assert all(len(row) == 8 for row in stats), 'stats gained an unsure column'
     assert all(isinstance(row[7], int) for row in stats)
+
+
+# --------------------------------------------------------------------------- #
+# one side with far less text than the other
+#
+# From two live failures on the same pair: a picture-heavy book whose B side
+# held seven text documents against the A side's forty. The path runs sideways
+# along a row for as far as it needs to, and the band was centred on where it
+# entered that row rather than spanning it, so the write of the endpoint at
+# (n, m) landed past the end of its array.
+# --------------------------------------------------------------------------- #
+
+def lopsided(n_shared=8, n_extra=200):
+    shared = [('p', 'Line %d %s' % (i, 'w' * (3 + i % 25)), 'x')
+              for i in range(n_shared)]
+    extra = [('p', 'Untranslated note %d.' % i, 'x') for i in range(n_extra)]
+    return shared, shared + extra
+
+
+def test_confidence_survives_a_long_run_along_one_row():
+    a, b = lopsided()
+    beads = ae.align(a, b)
+    margins = ae.confidence(a, b, beads)
+    assert len(margins) == len(beads)
+
+
+def test_the_band_contains_the_whole_path():
+    """The invariant behind the crash: a margin compares the optimum against
+    its alternatives, so the optimum has to be inside the window."""
+    a, b = lopsided()
+    beads = ae.align(a, b)
+    pts = ae._path_points(beads)
+    n, m = len(a), len(b)
+
+    band = 40
+    first, final = {}, {}
+    for i, j in pts:
+        first.setdefault(i, j)
+        final[i] = j
+    enter = leave = 0
+    lo, hi = [], []
+    for i in range(n + 1):
+        enter = first.get(i, leave)
+        leave = final.get(i, leave)
+        lo.append(max(0, enter - band))
+        hi.append(min(m, leave + band))
+
+    for i, j in pts:
+        assert lo[i] <= j <= hi[i], 'path point (%d, %d) is outside the band' % (i, j)
+    assert hi[n] == m, 'the endpoint must be reachable'
+    assert lo[0] == 0, 'the origin must be reachable'
+
+
+def test_a_lopsided_pair_still_merges(tmp_path):
+    """End to end, because the crash reached users through merge()."""
+    a, b = lopsided(n_shared=6, n_extra=150)
+    beads = ae.align(a, b)
+    assert ae.confidence(a, b, beads)
