@@ -4,6 +4,7 @@ heading-based chapter splitting. None of this file knows what book it's
 looking at -- that's the whole point."""
 import html as _html
 import math
+import os
 import re
 import sys
 from array import array
@@ -250,8 +251,9 @@ def align(a_blocks, b_blocks):
     sys.stderr.write('align: %d x %d blocks, corridor %.0f MB\n'
                      % (n, m, _corridor(n, band) / 1048576.0))
     sys.stderr.flush()
-    if _corridor(n, band) > MAX_CORRIDOR_BYTES:
-        raise UserFacing('err.too_big', n, m)
+    if _corridor(n, band) > _ceiling():
+        raise UserFacing('err.too_big' if _hosted() else 'err.too_big_local',
+                         n, m)
 
     while True:
         beads, touched = _align_banded(a_blocks, b_blocks, band)
@@ -276,7 +278,7 @@ def align(a_blocks, b_blocks):
         # the wall, and those come back with small margins, so they are
         # already marked for a second look.
         wider = min(band * 2, m)
-        if _corridor(n, wider) > MAX_CORRIDOR_BYTES:
+        if _corridor(n, wider) > _ceiling():
             sys.stderr.write('align: corridor capped at %d; the path wanted more room\n' % band)
             sys.stderr.flush()
             return beads if beads is not None else [(list(a_blocks), list(b_blocks))]
@@ -349,7 +351,33 @@ STEPS = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)]
 #: host's 300 MB: Monte Cristo fits in 34 MB and the whole job peaks at 67, so
 #: this leaves room for a book several times longer while still refusing the
 #: ones that would take the process down.
+#: What one alignment may spend on its corridor when nothing is waiting on it.
+#: Set against the deploy host's 300 MB: a well-matched pair of 29040
+#: paragraphs needs 135 MB of corridor and peaks at 196 MB in total, so this
+#: leaves the process room while still refusing what would take it down.
 MAX_CORRIDOR_BYTES = 160 * 1024 * 1024
+
+#: And what it may spend when a browser is holding the connection open.
+#:
+#: Memory is not the binding constraint there; time is. Work scales with the
+#: corridor at about 10 seconds a megabyte on the deploy host -- Monte Cristo,
+#: 34 MB of corridor, takes 326 seconds -- and nginx closes the connection at
+#: 600. So a pair large enough to need much more than 56 MB cannot deliver a
+#: result to a browser no matter how much memory it is given: it earns a
+#: timeout, and the reader is left with nothing and no explanation. Five
+#: people gave up waiting on one before this existed.
+#:
+#: Refusing at the door instead, with somewhere to go, is the honest answer.
+HOSTED_CORRIDOR_BYTES = 56 * 1024 * 1024
+
+
+def _hosted():
+    #: Set by the web interface when it is serving the public.
+    return os.environ.get('BILINGUAL_EPUB_HOSTED') == '1'
+
+
+def _ceiling():
+    return HOSTED_CORRIDOR_BYTES if _hosted() else MAX_CORRIDOR_BYTES
 
 
 def _corridor(n, band):

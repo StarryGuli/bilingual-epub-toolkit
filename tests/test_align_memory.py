@@ -101,7 +101,8 @@ def test_a_job_too_large_is_refused_rather_than_fatal():
         ae.align(a, b)
     text = str(exc.value)
     assert str(n) in text, 'the reader is not told how large their book is'
-    assert 'pip install' in text, 'no route offered for a book this size'
+    assert 'MAX_CORRIDOR_BYTES' in text, \
+        'a local reader can raise the limit and should be told so'
 
 
 def test_a_normal_book_is_nowhere_near_the_ceiling():
@@ -171,3 +172,40 @@ def test_widening_still_reaches_the_answer_when_it_fits(monkeypatch):
     ae.align(a, b)
     assert len(tried) == 3, 'widening stopped early on a book that fits'
     assert tried == sorted(tried), 'widths should increase'
+
+
+def test_the_hosted_ceiling_is_set_by_time_not_memory(monkeypatch):
+    """A browser gets a tighter limit than a terminal, for a different reason.
+
+    Alignment costs about ten seconds a megabyte of corridor on the deploy
+    host, and nginx closes the connection at six hundred. A pair needing much
+    more than the hosted ceiling cannot deliver a result to a browser however
+    much memory it is given -- it earns a timeout, and the reader is left with
+    nothing and no explanation.
+    """
+    assert ae.HOSTED_CORRIDOR_BYTES < ae.MAX_CORRIDOR_BYTES
+
+    n = int((ae.HOSTED_CORRIDOR_BYTES / 0.16) ** 0.5) + 3000
+    a = [('p', 'x', 'l')] * n
+    b = [('p', 'y', 'l')] * n
+
+    from bilingual_epub.errors import UserFacing
+
+    monkeypatch.setenv('BILINGUAL_EPUB_HOSTED', '1')
+    with pytest.raises(UserFacing) as hosted:
+        ae.align(a, b)
+    text = str(hosted.value)
+    assert 'pip install' in text, 'a hosted reader is given nowhere to go'
+    assert 'MAX_CORRIDOR_BYTES' not in text, 'that is not theirs to change'
+
+    # the same pair is fine from a terminal, where nothing is timing out
+    monkeypatch.delenv('BILINGUAL_EPUB_HOSTED')
+    assert ae._corridor(n, max(64, int(0.08 * n))) <= ae.MAX_CORRIDOR_BYTES
+
+
+def test_monte_cristo_still_fits_the_hosted_ceiling():
+    """The longest book actually tested must not be turned away."""
+    n, m = 14512, 4214
+    band = max(64, int(0.08 * max(n, m)))
+    assert ae._corridor(n, band) < ae.HOSTED_CORRIDOR_BYTES, \
+        'the hosted limit now refuses a book that demonstrably works'

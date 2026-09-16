@@ -429,13 +429,24 @@ STRINGS = {
     #: it in advance is the only way the reader gets told anything at all --
     #: and the local install has no such ceiling, so there is somewhere to go.
     'err.too_big':       ('This pair is too large for the hosted service: '
-                          '%d and %d paragraphs. Install the toolkit and run '
-                          'it on your own machine -- pip install '
-                          'bilingual-epub-toolkit -- where there is no memory '
-                          'limit.',
+                          '%d and %d paragraphs. A book this size takes longer '
+                          'to align than the connection will stay open, so it '
+                          'would fail even given the time. Install the toolkit '
+                          'and run it on your own machine -- pip install '
+                          'bilingual-epub-toolkit -- where neither limit '
+                          'applies.',
                           '这一对书对在线服务来说太大了：%d 段和 %d 段。'
-                          '请在本机安装后运行（pip install '
-                          'bilingual-epub-toolkit），本机没有这个内存上限。'),
+                          '这个规模的书，对齐所需的时间超过连接能保持的时长，'
+                          '即使等下去也拿不到结果。请在本机安装后运行'
+                          '（pip install bilingual-epub-toolkit），'
+                          '本机没有这两个限制。'),
+    'err.too_big_local': ('This pair needs more memory than one alignment is '
+                          'allowed: %d and %d paragraphs. Raise '
+                          'align_engine.MAX_CORRIDOR_BYTES if the machine has '
+                          'the room.',
+                          '这一对书需要的内存超过了单次对齐的配额：%d 段和 '
+                          '%d 段。机器内存够的话，可以调高 '
+                          'align_engine.MAX_CORRIDOR_BYTES。'),
     'err.no_opencc':     ('Simplified/traditional conversion is not available '
                           'on this server. Set the conversion option back to '
                           '"no conversion" and the merge will run.',
