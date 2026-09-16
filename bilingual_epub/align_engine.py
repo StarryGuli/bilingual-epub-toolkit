@@ -247,12 +247,12 @@ def align(a_blocks, b_blocks):
     # So the size goes to the log before the expensive part rather than after,
     # where a kill cannot erase it, and a job too large to survive is refused
     # while there is still someone to refuse it to.
-    cells = n * (2 * band + 1)
     sys.stderr.write('align: %d x %d blocks, corridor %.0f MB\n'
-                     % (n, m, cells / 1048576.0))
+                     % (n, m, _corridor(n, band) / 1048576.0))
     sys.stderr.flush()
-    if cells > MAX_CORRIDOR_BYTES:
+    if _corridor(n, band) > MAX_CORRIDOR_BYTES:
         raise UserFacing('err.too_big', n, m)
+
     while True:
         beads, touched = _align_banded(a_blocks, b_blocks, band)
         if beads is not None and not touched:
@@ -260,7 +260,27 @@ def align(a_blocks, b_blocks):
         if band >= m:
             # already the full lattice; whatever came back is the true optimum
             return beads if beads is not None else [(list(a_blocks), list(b_blocks))]
-        band = min(band * 2, m)
+
+        # Checking the opening width and then doubling past it, which is what
+        # this did, is no limit at all: widening runs until band >= m, and the
+        # corridor at that point IS the full lattice -- 800 MB for a pair of
+        # 20000 -- reached by re-running the whole DP at every width along the
+        # way. A job died that way after fourteen minutes, and because the
+        # kernel did the killing it left no record of what book it was.
+        #
+        # So the ceiling applies to the width about to be tried. When the next
+        # one will not fit, the widest that does is what the reader gets: an
+        # alignment computed in a corridor narrower than the drift really
+        # wants, which is worse than the true optimum and far better than no
+        # book at all. The pairings it gets wrong are the ones pressed against
+        # the wall, and those come back with small margins, so they are
+        # already marked for a second look.
+        wider = min(band * 2, m)
+        if _corridor(n, wider) > MAX_CORRIDOR_BYTES:
+            sys.stderr.write('align: corridor capped at %d; the path wanted more room\n' % band)
+            sys.stderr.flush()
+            return beads if beads is not None else [(list(a_blocks), list(b_blocks))]
+        band = wider
 
 
 # --------------------------------------------------------------------------- #
@@ -330,6 +350,11 @@ STEPS = [(1, 1), (1, 0), (0, 1), (2, 1), (1, 2), (2, 2)]
 #: this leaves room for a book several times longer while still refusing the
 #: ones that would take the process down.
 MAX_CORRIDOR_BYTES = 160 * 1024 * 1024
+
+
+def _corridor(n, band):
+    #: Bytes the back-pointers occupy at this width -- one per cell.
+    return n * (2 * band + 1)
 
 
 def _path_points(beads):

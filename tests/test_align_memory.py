@@ -120,3 +120,54 @@ def test_the_size_is_logged_before_the_expensive_part(capsys):
     ae.align(a, b)
     err = capsys.readouterr().err
     assert 'align: 200 x 200 blocks' in err, err
+
+
+def test_widening_never_exceeds_the_ceiling(monkeypatch):
+    """The ceiling has to apply to the width about to be tried, not the first.
+
+    Checking only the opening band is no limit at all: widening doubles until
+    it reaches m, and the corridor at that width is the full lattice -- 800 MB
+    for a pair of 20000, reached by re-running the whole DP at every width on
+    the way up. That is what a fourteen-minute job was doing when the kernel
+    killed it.
+    """
+    n = m = 20000
+    a = [('p', 'x', 'l')] * n
+    b = [('p', 'y', 'l')] * m
+
+    tried = []
+
+    def always_touching(a_blocks, b_blocks, band):
+        tried.append(band)
+        return [(list(a_blocks), list(b_blocks))], True
+
+    monkeypatch.setattr(ae, '_align_banded', always_touching)
+    beads = ae.align(a, b)
+
+    assert beads, 'capping must still return an alignment'
+    assert tried, 'the aligner never ran'
+    for band in tried:
+        # computed here rather than borrowed from the module, so this still
+        # measures the invariant against an implementation that lacks a helper
+        cells = n * (2 * band + 1)
+        assert cells <= ae.MAX_CORRIDOR_BYTES, \
+            'tried a corridor of %.0f MB against a ceiling of %.0f' % (
+                cells / 1048576, ae.MAX_CORRIDOR_BYTES / 1048576)
+    assert max(tried) < m, 'widening still walked all the way to the full lattice'
+
+
+def test_widening_still_reaches_the_answer_when_it_fits(monkeypatch):
+    """Capping must not fire on books that can afford the room they need."""
+    n = m = 400
+    a = [('p', 'x', 'l')] * n
+    b = [('p', 'y', 'l')] * m
+    tried = []
+
+    def touch_once(a_blocks, b_blocks, band):
+        tried.append(band)
+        return [(list(a_blocks), list(b_blocks))], len(tried) < 3
+
+    monkeypatch.setattr(ae, '_align_banded', touch_once)
+    ae.align(a, b)
+    assert len(tried) == 3, 'widening stopped early on a book that fits'
+    assert tried == sorted(tried), 'widths should increase'
