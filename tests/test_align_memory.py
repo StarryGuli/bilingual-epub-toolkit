@@ -174,14 +174,13 @@ def test_widening_still_reaches_the_answer_when_it_fits(monkeypatch):
     assert tried == sorted(tried), 'widths should increase'
 
 
-def test_the_hosted_ceiling_is_set_by_time_not_memory(monkeypatch):
+def test_the_hosted_ceiling_is_tighter_than_the_local_one(monkeypatch):
     """A browser gets a tighter limit than a terminal, for a different reason.
 
-    Alignment costs about ten seconds a megabyte of corridor on the deploy
-    host, and nginx closes the connection at six hundred. A pair needing much
-    more than the hosted ceiling cannot deliver a result to a browser however
-    much memory it is given -- it earns a timeout, and the reader is left with
-    nothing and no explanation.
+    Locally the limit is memory. Hosted, it is the single job slot: a pair at
+    the ceiling holds it for twenty minutes while everyone else waits. The
+    first version of this justified the number with a timeout that turned out
+    to be the wrong one; see HOSTED_CORRIDOR_BYTES for what was measured.
     """
     assert ae.HOSTED_CORRIDOR_BYTES < ae.MAX_CORRIDOR_BYTES
 

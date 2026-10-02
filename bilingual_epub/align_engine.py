@@ -2,6 +2,7 @@
 """Book-agnostic block extraction, Gale-Church paragraph alignment, and
 heading-based chapter splitting. None of this file knows what book it's
 looking at -- that's the whole point."""
+import contextvars
 import html as _html
 import math
 import os
@@ -176,6 +177,11 @@ def _align_banded(a_blocks, b_blocks, band):
     ring[0][0] = 0.0                       # lo[0] is 0, so offset 0 is column 0
 
     for i in range(n + 1):
+        if not i & 63:
+            # cheap enough to do every 64 rows, and that is often enough: a
+            # job whose reader has gone stops within a second or so instead
+            # of holding the only slot for another quarter of an hour
+            _check()
         cur = ring[i % 3]
         loi = lo[i]
         for off in range(width[i]):
@@ -359,16 +365,45 @@ MAX_CORRIDOR_BYTES = 160 * 1024 * 1024
 
 #: And what it may spend when a browser is holding the connection open.
 #:
-#: Memory is not the binding constraint there; time is. Work scales with the
-#: corridor at about 10 seconds a megabyte on the deploy host -- Monte Cristo,
-#: 34 MB of corridor, takes 326 seconds -- and nginx closes the connection at
-#: 600. So a pair large enough to need much more than 56 MB cannot deliver a
-#: result to a browser no matter how much memory it is given: it earns a
-#: timeout, and the reader is left with nothing and no explanation. Five
-#: people gave up waiting on one before this existed.
+#: This was first set from a wrong premise, and the history matters. It was
+#: sized against nginx's 600-second read timeout at an estimated ten seconds a
+#: megabyte of corridor. Neither number held. In front of nginx a stream proxy
+#: closes connections idle for 300 seconds, which is what was actually cutting
+#: readers off; and on the deploy host real pairs ran at about twenty-three
+#: seconds a megabyte -- 11985 x 11968 paragraphs, a 22 MB corridor, took 504
+#: seconds; 16074 x 17169, 42 MB, took sixteen minutes -- because the figure
+#: logged up front is only the opening corridor and widening adds passes.
 #:
-#: Refusing at the door instead, with somewhere to go, is the honest answer.
+#: The web handler now keeps the connection alive while a job runs, so no
+#: proxy cuts it, and stops the job if the reader leaves. What this limit
+#: protects is the single job slot: a pair at the ceiling holds it for twenty
+#: minutes or so while everyone else waits. That is a capacity choice rather
+#: than a correctness one, and it is set where the largest real pairs seen so
+#: far still get through.
 HOSTED_CORRIDOR_BYTES = 56 * 1024 * 1024
+
+
+class Cancelled(Exception):
+    """The job was abandoned; stop and give the slot back."""
+
+
+#: Set by whoever runs a job on behalf of someone who might leave. A context
+#: variable rather than a parameter, so it reaches the inner loops without
+#: threading a new argument through every signature between the web handler
+#: and the DP -- and rather than a global, so it belongs to the one thread
+#: doing that job and no other.
+_cancel = contextvars.ContextVar('bilingual_epub_cancel', default=None)
+
+
+def set_cancel(event):
+    """Make the current thread's alignment stop when `event` is set."""
+    return _cancel.set(event)
+
+
+def _check():
+    ev = _cancel.get()
+    if ev is not None and ev.is_set():
+        raise Cancelled()
 
 
 def _hosted():
@@ -452,6 +487,8 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     fwd = [array('d', [INF]) * w for w in width]
     fwd[0][0 - lo[0]] = 0.0
     for i in range(n + 1):
+        if not i & 63:
+            _check()
         row, loi = fwd[i], lo[i]
         for off in range(width[i]):
             base = row[off]
@@ -470,6 +507,8 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     bwd = [array('d', [INF]) * w for w in width]
     bwd[n][m - lo[n]] = 0.0
     for i in range(n, -1, -1):
+        if not i & 63:
+            _check()
         row, loi = bwd[i], lo[i]
         for off in range(width[i] - 1, -1, -1):
             j = loi + off

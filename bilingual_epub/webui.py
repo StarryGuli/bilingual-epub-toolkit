@@ -15,13 +15,18 @@ import io
 import json
 import os
 import re
+import select
 import shutil
+import socket
 import sys
 import tempfile
+import threading
+import time
 import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import align_engine as ae
 from . import diagnostics, guard, multipart, samples
 from . import merge as merge_mod
 from . import split as split_mod
@@ -1122,6 +1127,10 @@ def _blur_side(fields):
     return fields.get('blur_side', 'b')
 
 
+class ClientGone(Exception):
+    """The reader closed the connection before the job finished."""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'BilingualEpubToolkit'
 
@@ -1374,41 +1383,161 @@ class Handler(BaseHTTPRequestHandler):
             self._json({'ok': False, 'error': msg}, status=403)
             return
 
-        buf = io.StringIO()
-        real_stdout, sys.stdout = sys.stdout, buf
-        # aligning a book is CPU-bound; a few in parallel will bury a small host
-        with self.server.slots:
-            # taken inside the slot, so there is only ever one job to mark; a
-            # kill skips the finally below and leaves this behind as evidence
-            diagnostics.mark_inflight(
-                getattr(self.server, 'error_log', None), route,
-                [p for _name, p in files.values()])
-            try:
-                payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
-                payload['log'] = buf.getvalue().strip()
-                payload['ok'] = True
-            except (UserFacing, SystemExit) as e:
-                # these carry a message written for a person to read -- but not
-                # the server-side path they happened to mention, which is a
-                # temp directory and a session id the reader has no use for.
-                #
-                # UserFacing belongs here and not below: a book that is merely
-                # zipped twice is not a crash, and telling its owner to go and
-                # read a terminal on someone else's server told them nothing
-                # they could act on. Everything that is genuinely a defect
-                # still falls through to the generic reply.
-                payload = {'ok': False, 'error': diagnostics.scrub(str(e))}
-                self._log_failure(route, e)
-            except Exception as e:
-                # an unexpected failure: log it here, but do not ship the
-                # traceback to the browser -- it carries absolute server paths
-                traceback.print_exc(file=sys.stderr)
-                payload = {'ok': False, 'error': t('web.crashed')}
-                self._log_failure(route, e)
-            finally:
-                sys.stdout = real_stdout
-                diagnostics.clear_inflight(getattr(self.server, 'error_log', None))
-        self._json(payload)
+        self._run_job(route, fields, files)
+
+    # ---- running a job while someone waits for it ----------------------- #
+    #
+    # Every job longer than five minutes failed on the hosted instance, and it
+    # took a fortnight of logs to see why. A stream proxy in front of nginx
+    # closes any connection that carries no bytes for 300 seconds, and a job
+    # that is aligning sends nothing until it is finished -- so the reader was
+    # cut off at exactly five minutes, every time, and told their phone network
+    # had dropped the upload. Nineteen of twenty-seven failures in two weeks
+    # were that, and none of them reached the failure log, because the
+    # disconnect happened in front of the application rather than inside it.
+    #
+    # Worse, the job carried on. Nothing noticed the reader had gone, so it ran
+    # to completion in the only slot there is, and the retry the reader sent
+    # sat queued behind their own abandoned attempt. One afternoon spent thirty
+    # three minutes of that slot on two copies of a book nobody was waiting for.
+    #
+    # So the headers go out at once and a single space follows every twenty
+    # seconds until the result is ready. JSON ignores leading whitespace, so
+    # the browser parses the payload as before; every proxy on the path sees a
+    # live connection; and a write that fails is the first reliable sign that
+    # the reader has left, at which point the job is told to stop.
+    KEEPALIVE = 20.0
+    #: How often to look at the socket for a reader who has left. Writing a
+    #: space is not a reliable test on its own: the first write after the far
+    #: end closes usually succeeds into the kernel's buffer, so a departure was
+    #: noticed one keepalive late -- 31 seconds on the deploy host, during which
+    #: the next reader sat queued behind a job nobody wanted. A closed peer
+    #: makes the socket readable with nothing to read, which can be checked
+    #: every second for nothing.
+    POLL = 1.0
+
+    def _run_job(self, route, fields, files):
+        log_path = getattr(self.server, 'error_log', None)
+        stop = threading.Event()
+        box = {}
+        started = time.monotonic()
+
+        def work():
+            # the slot is taken here, in the worker, so the request thread can
+            # keep the connection alive while this one waits its turn
+            with self.server.slots:
+                if stop.is_set():
+                    # gave up while queued; do not start what nobody wants
+                    self._log_failure(route, ClientGone(t('web.client_gone')))
+                    return
+                diagnostics.mark_inflight(log_path, route,
+                                          [p for _name, p in files.values()])
+                ae.set_cancel(stop)
+                # redirected inside the slot: done before it, as it used to
+                # be, a queued request replaced stdout while another job was
+                # still printing into it, and stole its log
+                buf = io.StringIO()
+                real_stdout, sys.stdout = sys.stdout, buf
+                try:
+                    payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
+                    payload['log'] = buf.getvalue().strip()
+                    payload['ok'] = True
+                except ae.Cancelled:
+                    self._log_failure(route, ClientGone(t('web.client_gone')))
+                    payload = None
+                except (UserFacing, SystemExit) as e:
+                    # these carry a message written for a person to read --
+                    # but not the server-side path they happened to mention,
+                    # which is a temp directory the reader has no use for.
+                    #
+                    # UserFacing belongs here and not below: a book that is
+                    # merely zipped twice is not a crash, and sending its owner
+                    # to read a terminal on someone else's server told them
+                    # nothing they could act on.
+                    payload = {'ok': False, 'error': diagnostics.scrub(str(e))}
+                    self._log_failure(route, e)
+                except Exception as e:
+                    # a defect: logged in full here, never shipped to the
+                    # browser -- a traceback carries absolute server paths
+                    traceback.print_exc(file=sys.stderr)
+                    payload = {'ok': False, 'error': t('web.crashed')}
+                    self._log_failure(route, e)
+                finally:
+                    sys.stdout = real_stdout
+                    diagnostics.clear_inflight(log_path)
+                box['payload'] = payload
+
+        worker = threading.Thread(target=work, name='job', daemon=True)
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        # nginx buffers a proxied response by default, which would hold the
+        # spaces back and defeat the point; this turns that off for this
+        # response alone, without touching a configuration other sites share
+        self.send_header('X-Accel-Buffering', 'no')
+        self.end_headers()
+        worker.start()
+
+        gone = False
+        last_ping = time.monotonic()
+        while worker.is_alive():
+            worker.join(self.POLL)
+            if not worker.is_alive():
+                break
+            if self._peer_closed():
+                gone = True
+            elif time.monotonic() - last_ping >= self.KEEPALIVE:
+                gone = not self._ping()
+                last_ping = time.monotonic()
+            if gone:
+                stop.set()
+                break
+
+        if gone:
+            # the job notices within 64 rows; wait a moment so the slot is
+            # back before this thread exits, but never indefinitely
+            worker.join(60)
+            sys.stderr.write('job: reader left after %.0fs; stopped\n'
+                             % (time.monotonic() - started))
+            return
+
+        sys.stderr.write('job: done in %.0fs\n' % (time.monotonic() - started))
+        payload = box.get('payload')
+        if payload is None:
+            return
+        try:
+            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # finished just as they left; the result is built and waiting in
+            # their session, so nothing more is lost than the reply itself
+            pass
+
+    def _peer_closed(self):
+        """True once the reader has hung up.
+
+        The request has been read in full by now and a browser sends nothing
+        more on this connection, so readable means one of two things: the
+        far end closed it, or something unexpected arrived. Only an empty
+        read counts as closed.
+        """
+        try:
+            ready, _, _ = select.select([self.connection], [], [], 0)
+            if not ready:
+                return False
+            return self.connection.recv(1, socket.MSG_PEEK) == b''
+        except (OSError, ValueError):
+            return True
+
+    def _ping(self):
+        """One byte down the wire. False means nobody is listening."""
+        try:
+            self.wfile.write(b' ')
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False
 
     # ---- the three operations ------------------------------------------- #
     def _do_merge(self, fields, files):

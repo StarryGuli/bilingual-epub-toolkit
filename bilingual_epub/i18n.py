@@ -498,19 +498,31 @@ STRINGS = {
                           'or run it locally.',
                           '服务器没能及时返回（HTTP %s）。特别长的书可能超过网关等待'
                           '时间，可以重试，或者装到本地跑。'),
-    'web.js.dropped':    ('The connection dropped before the result came back. On a '
-                          'phone network this usually means the upload was '
-                          'interrupted.',
-                          '结果还没回来连接就断了。手机网络下通常是上传被中断了。'),
+    #: This used to blame the reader's phone network. On the hosted instance
+    #: the commonest cause was a proxy of ours closing a connection that had
+    #: been quiet for five minutes, which is now kept alive -- so what remains
+    #: is mostly the reader's side, and the advice is what they can do.
+    'web.js.dropped':    ('The connection was lost before the result arrived. If '
+                          'you switched away from this page or your network '
+                          'changed, try again and keep the page open until it '
+                          'finishes.',
+                          '结果返回之前连接中断了。如果你切换了页面或网络发生了'
+                          '变化，请重试，并在完成前保持此页面打开。'),
     # consumed by the page's JS via .replace(), never by Python %-formatting,
     # so a literal percent sign must not be doubled
     'web.js.uploading':  ('Uploading %s% — %s of %s MB',
                           '上传中 %s% —— %s / %s MB'),
     'web.js.working':    ('Uploaded. Aligning the book, this is the slow part…',
                           '传完了，正在对齐段落，这步最慢…'),
-    'web.js.slowhint':   ('Large books over a phone connection can take a few '
-                          'minutes. Leaving this page cancels it.',
-                          '手机网络传大书可能要几分钟。离开这个页面就会取消。'),
+    #: The slow part is aligning, not the network, and "leaving cancels it"
+    #: was not true until abandoned jobs were actually stopped.
+    'web.js.slowhint':   ('Long books can take several minutes to align. Keep '
+                          'this page open -- leaving it stops the job.',
+                          '较长的书对齐可能需要好几分钟。请保持此页面打开——'
+                          '离开页面会停止这个任务。'),
+    'web.client_gone':   ('The reader left before the result was ready, and the '
+                          'job was stopped.',
+                          '结果完成前读者已离开，任务已停止。'),
     'stats.unsure':      ('unsure', '存疑'),
     'stats.unsure_note': ('%d pairings were close calls. They are marked '
                           'data-unsure="1" in the output, so a reader or an '
