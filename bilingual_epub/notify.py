@@ -107,10 +107,19 @@ def read_reports(reports_dir):
 
 
 def summarise(failures, reports):
-    """Group failures by the reason a reader was given, commonest first."""
+    """Group failures by the reason a reader was given, commonest first.
+
+    Reasons are scrubbed again on the way out. Records written before the
+    scrubber learned about filenames with spaces still carry a book's title,
+    an author and the site it came from, and a digest that reprints them
+    copies that into every file and mail it reaches -- the first one written
+    to disk did exactly that. Scrubbing is idempotent, so current records are
+    unchanged by it.
+    """
+    from .diagnostics import scrub
     by_reason = {}
     for entry in failures:
-        key = entry.get('error') or entry.get('error_type') or 'unknown'
+        key = scrub(entry.get('error') or entry.get('error_type') or 'unknown')
         by_reason[key] = by_reason.get(key, 0) + 1
     ranked = sorted(by_reason.items(), key=lambda kv: -kv[1])
     open_reports = [r for r in reports if not r.get('resolved_at')]
@@ -120,6 +129,11 @@ def summarise(failures, reports):
         'reports_open': len(open_reports),
         'reports_awaiting_reply': sum(1 for r in open_reports if r.get('notify')),
     }
+
+
+def _scrub(text):
+    from .diagnostics import scrub
+    return scrub(text)
 
 
 def format_digest(summary, failures, reports, window):
@@ -141,7 +155,7 @@ def format_digest(summary, failures, reports, window):
                 continue
             lines.append('  %s  %s%s'
                          % (r['id'],
-                            (r.get('error') or '')[:90],
+                            _scrub(r.get('error') or '')[:90],
                             '  [will be notified]' if r.get('notify') else ''))
         lines += ['', 'Close one with:',
                   '  bilingual-epub-reports resolve <id> --message "..."']

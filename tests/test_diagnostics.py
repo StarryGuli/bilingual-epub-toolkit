@@ -215,3 +215,74 @@ def test_scrubbing_does_not_eat_an_a_slash_b_in_prose():
 def test_a_real_path_is_still_removed():
     assert '<path>' in diagnostics.scrub('workdir /tmp/epubmerge_ab12 cleaned')
     assert 'epubmerge_ab12' not in diagnostics.scrub('workdir /tmp/epubmerge_ab12 cleaned')
+
+
+# --------------------------------------------------------------------------- #
+# a job the process did not survive
+# --------------------------------------------------------------------------- #
+
+def test_a_completed_job_leaves_no_marker(tmp_path, en_epub):
+    log = str(tmp_path / 'failures.jsonl')
+    diagnostics.mark_inflight(log, '/api/merge', [en_epub])
+    diagnostics.clear_inflight(log)
+    assert diagnostics.recover_inflight(log) is None
+    assert not os.path.exists(log), 'a clean job wrote a failure record'
+
+
+def test_a_killed_job_is_recovered_as_a_failure(tmp_path, en_epub):
+    """The marker outlives the process; the next start-up records it."""
+    log = str(tmp_path / 'failures.jsonl')
+    diagnostics.mark_inflight(log, '/api/merge', [en_epub])
+    # no clear_inflight: this is what a kill looks like from the outside
+
+    entry = diagnostics.recover_inflight(log)
+    assert entry and entry['error_type'] == 'Killed'
+    assert entry['inputs'] and entry['inputs'][0]['is_zip'] is True, \
+        'the book was not described while it still existed'
+
+    with open(log, encoding='utf-8') as f:
+        recorded = [json.loads(line) for line in f]
+    assert recorded[-1]['error_type'] == 'Killed'
+    assert diagnostics.recover_inflight(log) is None, 'recorded twice'
+
+
+def test_the_marker_holds_no_filename(tmp_path):
+    """Same promise as every other record: structure, not titles."""
+    log = str(tmp_path / 'failures.jsonl')
+    book = tmp_path / 'Hippopotamus (Stephen Fry).epub'
+    book.write_bytes(b'not really a book')
+    diagnostics.mark_inflight(log, '/api/merge', [str(book)])
+    raw = open(tmp_path / 'inflight.json', encoding='utf-8').read()
+    assert 'Hippopotamus' not in raw and 'Stephen Fry' not in raw
+
+
+def test_a_real_sigkill_mid_job_is_recovered(tmp_path, en_epub):
+    """End to end with an actual kill, because the whole point is the path
+    on which no Python cleanup runs."""
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    log = str(tmp_path / 'failures.jsonl')
+    child = subprocess.Popen([sys.executable, '-c', (
+        'import sys, time\n'
+        'sys.path.insert(0, %r)\n'
+        'from bilingual_epub import diagnostics\n'
+        'diagnostics.mark_inflight(%r, "/api/merge", [%r])\n'
+        'try:\n'
+        '    time.sleep(60)\n'
+        'finally:\n'
+        '    diagnostics.clear_inflight(%r)\n'
+    ) % (os.getcwd(), log, str(en_epub), log)])
+    marker = tmp_path / 'inflight.json'
+    for _ in range(100):
+        if marker.exists():
+            break
+        time.sleep(0.05)
+    assert marker.exists(), 'the child never started its job'
+
+    child.send_signal(signal.SIGKILL)
+    child.wait()
+    assert marker.exists(), 'a SIGKILL ran the cleanup, which it cannot'
+    assert diagnostics.recover_inflight(log)['error_type'] == 'Killed'

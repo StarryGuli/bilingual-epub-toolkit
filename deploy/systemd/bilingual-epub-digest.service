@@ -17,12 +17,18 @@ Environment=BILINGUAL_EPUB_LOG=/var/log/bilingual-epub/failures.jsonl
 Environment=BILINGUAL_EPUB_REPORTS=/var/lib/bilingual-epub/reports
 # set this to where the digest should go, then: systemctl daemon-reload
 Environment=BILINGUAL_EPUB_TO=
+# The journal on a shared host is not a record: on the deploy host it holds
+# about three and a half days before another service's output pushes it out.
+# The digest also goes to a file beside failures.jsonl, which nothing rotates.
+Environment=BILINGUAL_EPUB_DIGEST_LOG=/var/log/bilingual-epub/digest.log
 ExecStart=/opt/bilingual-epub/venv/bin/bilingual-epub-reports digest \
     --since 1d --quiet-when-idle
 
-# it reads two directories and sends mail; it has no business anywhere else
+# it reads the reports, appends to its own log, and may send mail;
+# it has no business anywhere else
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadOnlyPaths=/var/log/bilingual-epub /var/lib/bilingual-epub
+ReadWritePaths=/var/log/bilingual-epub
+ReadOnlyPaths=/var/lib/bilingual-epub

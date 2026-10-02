@@ -1378,6 +1378,11 @@ class Handler(BaseHTTPRequestHandler):
         real_stdout, sys.stdout = sys.stdout, buf
         # aligning a book is CPU-bound; a few in parallel will bury a small host
         with self.server.slots:
+            # taken inside the slot, so there is only ever one job to mark; a
+            # kill skips the finally below and leaves this behind as evidence
+            diagnostics.mark_inflight(
+                getattr(self.server, 'error_log', None), route,
+                [p for _name, p in files.values()])
             try:
                 payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
                 payload['log'] = buf.getvalue().strip()
@@ -1402,6 +1407,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._log_failure(route, e)
             finally:
                 sys.stdout = real_stdout
+                diagnostics.clear_inflight(getattr(self.server, 'error_log', None))
         self._json(payload)
 
     # ---- the three operations ------------------------------------------- #
@@ -1514,6 +1520,11 @@ def main():
     os.makedirs(srv.outputs)
     srv.cfg = cfg
     srv.error_log = args.error_log
+    # a marker left by the last process means it was killed mid-job
+    killed = diagnostics.recover_inflight(args.error_log)
+    if killed:
+        sys.stderr.write('recovered a job the previous process died running '
+                         '(started %s, %s)\n' % (killed['at'], killed['endpoint']))
     srv.reports_dir = args.reports_dir or os.path.join(workdir, 'reports')
     if not os.path.isdir(srv.reports_dir):
         os.makedirs(srv.reports_dir)

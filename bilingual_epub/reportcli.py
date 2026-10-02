@@ -34,6 +34,20 @@ def _since(spec):
     return at.isoformat(timespec='seconds')
 
 
+def _append(path, text):
+    """Keep the digest somewhere it will still be next week.
+
+    Printing it is not enough on a host whose journal is shared. The deploy
+    host caps the journal at 100 MB and another service writes three quarters
+    of it, so anything printed there is gone in about three and a half days --
+    two nights' digests that each reported failures were lost that way before
+    anyone read them. This file belongs to the service and nothing rotates it.
+    """
+    stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    with open(path, 'a', encoding='utf-8') as f:
+        f.write('==== %s ====\n%s\n\n' % (stamp, text.rstrip()))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog='bilingual-epub-reports',
                                 description=__doc__,
@@ -51,6 +65,8 @@ def main(argv=None):
                     help='where to send it; prints to stdout if omitted')
     pd.add_argument('--quiet-when-idle', action='store_true',
                     help='send nothing when there is nothing to report')
+    pd.add_argument('--append-to', default=os.environ.get('BILINGUAL_EPUB_DIGEST_LOG'),
+                    help='also append the digest to this file, dated')
 
     sub.add_parser('list', help='every report, open ones first')
 
@@ -77,6 +93,8 @@ def main(argv=None):
         idle = not summary['failures'] and not fresh
         if idle and args.quiet_when_idle:
             return 0
+        if args.append_to:
+            _append(args.append_to, text)
         if args.to:
             mailer.send(args.to, 'EPUB toolkit: %d failure(s), %d report(s) open'
                         % (summary['failures'], summary['reports_open']), text)

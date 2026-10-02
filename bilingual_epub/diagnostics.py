@@ -178,3 +178,93 @@ def save_report(reports_dir, report, files=()):
     with open(os.path.join(dest, 'report.json'), 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     return rid
+
+
+# --------------------------------------------------------------------------- #
+# jobs that never finished
+#
+# A process killed by the kernel runs no except clause and no finally, so the
+# job it was doing leaves no failure record at all. The hosted instance lost
+# one that way, and the only trace was a line on stderr -- which went to a
+# journal capped at 100 MB, three quarters of it written by another service,
+# so it was gone again in three and a half days.
+#
+# A marker on disk covers it. It is written when a job starts and removed when
+# the process survives the job, whatever the outcome. One that is still there
+# at the next start-up can only mean the previous process died mid-job, and it
+# is turned into an ordinary failure record -- the same file, the same digest,
+# the same place anyone already looks.
+#
+# One marker is enough because jobs run one at a time; the caller holds the
+# slot that guarantees it.
+# --------------------------------------------------------------------------- #
+
+def _inflight_path(log_path):
+    return os.path.join(os.path.dirname(log_path) or '.', 'inflight.json')
+
+
+def mark_inflight(log_path, endpoint, paths=()):
+    """Note that a job has started. Never raises.
+
+    The inputs are fingerprinted now rather than later: if the process dies,
+    its scratch directory goes with it, and there is nothing left to inspect.
+    """
+    if not log_path:
+        return
+    try:
+        marker = {
+            'at': datetime.datetime.now(datetime.timezone.utc)
+            .isoformat(timespec='seconds'),
+            'endpoint': endpoint,
+            'inputs': [fingerprint(p) for p in paths if p],
+        }
+        with open(_inflight_path(log_path), 'w', encoding='utf-8') as f:
+            json.dump(marker, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def clear_inflight(log_path):
+    """The process outlived the job. Never raises."""
+    if not log_path:
+        return
+    try:
+        os.remove(_inflight_path(log_path))
+    except OSError:
+        pass
+
+
+def recover_inflight(log_path):
+    """At start-up: record the job the last process died doing, if any.
+
+    Returns the recovered entry, or None. The entry carries the time the job
+    started, not the time it was found, so it sorts where it happened.
+    """
+    if not log_path:
+        return None
+    path = _inflight_path(log_path)
+    try:
+        with open(path, encoding='utf-8') as f:
+            marker = json.load(f)
+    except (OSError, ValueError):
+        return None
+    entry = {
+        'at': marker.get('at'),
+        'endpoint': marker.get('endpoint'),
+        'error_type': 'Killed',
+        'error': 'The job stopped without finishing: the process was '
+                 'terminated while it ran, most likely for exceeding its '
+                 'memory limit. Found on the next start-up.',
+        'inputs': marker.get('inputs') or [],
+        'recovered_at': datetime.datetime.now(datetime.timezone.utc)
+        .isoformat(timespec='seconds'),
+    }
+    try:
+        line = json.dumps(entry, ensure_ascii=False)
+        with _LOCK:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(line + '\n')
+        os.remove(path)
+    except Exception:
+        return None
+    return entry

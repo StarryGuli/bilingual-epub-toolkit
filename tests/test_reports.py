@@ -138,3 +138,41 @@ def test_a_new_report_does_trigger_the_digest(store, capsys):
     reports_main(['--log', _log, '--reports', reports,
                   'digest', '--since', '1d', '--quiet-when-idle'])
     assert 'report(s) open' in capsys.readouterr().out
+
+
+def test_the_digest_is_kept_in_a_file_that_outlives_the_journal(store):
+    """Two nights' digests were lost to a journal another service filled."""
+    log, reports = store
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+    add_failure(log, now, 'Something failed.')
+    kept = os.path.join(os.path.dirname(log), 'digest.log')
+
+    reports_main(['--log', log, '--reports', reports,
+                  'digest', '--quiet-when-idle', '--append-to', kept])
+    reports_main(['--log', log, '--reports', reports,
+                  'digest', '--quiet-when-idle', '--append-to', kept])
+    text = open(kept, encoding='utf-8').read()
+    assert text.count('====') == 4, 'each run should add one dated block'
+    assert 'Something failed.' in text
+
+
+def test_a_quiet_night_adds_nothing_to_the_file(store):
+    log, reports = store
+    kept = os.path.join(os.path.dirname(log), 'digest.log')
+    reports_main(['--log', log, '--reports', reports,
+                  'digest', '--quiet-when-idle', '--append-to', kept])
+    assert not os.path.exists(kept), 'an idle night wrote to the file'
+
+
+def test_old_records_do_not_leak_titles_into_the_digest(store):
+    """Records written before scrubbing handled spaces still hold a title.
+    Reprinting them copied it into the first digest file ever written."""
+    log, reports = store
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')
+    add_failure(log, now,
+                "不是合法的 EPUB: '<path> (［英］斯蒂芬·弗莱（Stephen Fry）黄天怡译) "
+                "(z-library.sk, 1lib.sk, z-lib.sk).epub'")
+    summary = notify.summarise(notify.read_failures(log), [])
+    text = notify.format_digest(summary, [], [], '1d')
+    for secret in ('Stephen Fry', '斯蒂芬', 'z-library'):
+        assert secret not in text, '%r reached the digest' % secret
