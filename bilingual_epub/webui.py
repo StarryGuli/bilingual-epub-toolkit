@@ -26,8 +26,7 @@ import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import align_engine as ae
-from . import diagnostics, guard, multipart, samples
+from . import diagnostics, guard, multipart, progress, samples
 from . import merge as merge_mod
 from . import split as split_mod
 from .errors import UserFacing
@@ -603,10 +602,75 @@ document.addEventListener('click', async e => {
   }
 });
 
+/* ---- live progress ---- */
+/* The response to a job is a stream of lines, one JSON object each: progress
+   while the job runs, the result last. Reading them as they arrive is what
+   turns several minutes of a motionless spinner -- indistinguishable from a
+   hung server, and abandoned as one -- into a bar that moves and says how
+   long is left. */
+function progressWatcher(fill, ptext) {
+  let seen = 0, stageKey = '', t0 = 0, d0 = 0;
+  function fmt(secs) {
+    return secs >= 90 ? L.prog.min.replace('%s', Math.round(secs / 60))
+                      : L.prog.sec.replace('%s', Math.max(5, Math.round(secs / 5) * 5));
+  }
+  function show(p) {
+    const now = Date.now(), key = p.stage + '/' + p.attempt;
+    if (key !== stageKey) { stageKey = key; t0 = now; d0 = p.done; }
+    const pct = p.total ? Math.min(100, Math.floor(p.done / p.total * 100)) : 0;
+    let text;
+    if (p.stage === 'queued') text = L.prog.queued.replace('%s', p.ahead);
+    else if (p.stage === 'reading') text = L.prog.reading;
+    else if (p.stage === 'aligning')
+      text = p.attempt > 1 ? L.prog.retry.replace('%s', p.attempt).replace('%s', pct)
+                           : L.prog.aligning.replace('%s', pct);
+    else if (p.stage === 'checking') text = L.prog.checking.replace('%s', pct);
+    else if (p.stage === 'writing') text = L.prog.writing.replace('%s', pct);
+    else text = p.stage;
+    // A rate measured within the current stage, and only once there is
+    // enough of it to mean something: an estimate from the first second is
+    // wild, and one carried across a widened pass is simply wrong.
+    const elapsed = (now - t0) / 1000, moved = p.done - d0;
+    if ((p.stage === 'aligning' || p.stage === 'checking') && p.total &&
+        moved > 0 && elapsed >= 5 && pct >= 2 && pct < 100)
+      text += ' · ' + L.prog.eta.replace('%s', fmt((p.total - p.done) / (moved / elapsed)));
+    fill.style.width = pct + '%';
+    ptext.textContent = text;
+  }
+  return {
+    feed(body) {
+      const end = body.lastIndexOf('\n');
+      if (end < seen) return;
+      for (const line of body.slice(seen, end).split('\n')) {
+        if (!line.trim()) continue;
+        try { const o = JSON.parse(line); if (o.progress) show(o.progress); }
+        catch (err) { /* a partial line; the next event completes it */ }
+      }
+      seen = end + 1;
+    },
+  };
+}
+
+function lastResult(body) {
+  const lines = body.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    try { const o = JSON.parse(l); if (!o.progress) return o; } catch (err) { /* skip */ }
+  }
+  return null;
+}
+
 $$('form').forEach(form => form.addEventListener('submit', async e => {
   e.preventDefault();
   const btn = $('.go', form);
   const out = $('.result', form.closest('.panel'));
+  // Declared out here rather than inside the try: the finally below uses
+  // them, and a const inside the try is invisible to it. That threw on every
+  // submission and skipped the rest of the finally, so the button stayed on
+  // "working" and Turnstile was never reset -- a second attempt needed a
+  // reload of the page.
+  const bar = $('.prog', form), fill = $('.prog i', form), ptext = $('.prog-t', form);
   btn.disabled = true; btn.classList.add('busy');
   out.innerHTML = '';
 
@@ -628,9 +692,9 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
     // XHR, not fetch: fetch cannot report upload progress, and a silent
     // spinner through a multi-minute phone upload is why people abandoned
     // mid-transfer -- those were the 499s in the access log.
-    const bar = $('.prog', form), fill = $('.prog i', form), ptext = $('.prog-t', form);
     bar.classList.add('on'); ptext.classList.add('on');
     fill.style.width = '0%'; ptext.textContent = L.slowHintJs;
+    const watch = progressWatcher(fill, ptext);
 
     const res = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -645,9 +709,10 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
           .replace('%s', (ev.total / 1048576).toFixed(1));
       };
       xhr.upload.onload = () => {
-        fill.style.width = '100%';
+        fill.style.width = '0%';
         ptext.textContent = L.workingJs;
       };
+      xhr.onprogress = () => watch.feed(xhr.responseText);
       xhr.onload = () => resolve({
         status: xhr.status,
         headers: { get: h => xhr.getResponseHeader(h) },
@@ -663,9 +728,16 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
     // with its own HTML page, and parsing that produced the unreadable
     // "invalid HTML" error people were actually seeing.
     const ctype = res.headers.get('content-type') || '';
-    if (!ctype.includes('application/json')) {
+    let data;
+    if (ctype.includes('ndjson')) {
+      data = lastResult(res.body);
+      // the stream closed without a result: the connection was cut mid-job
+      if (!data) throw new TypeError('no result');
+    } else if (ctype.includes('application/json')) {
+      data = JSON.parse(res.body);
+    } else {
       let msg;
-      if (res.status === 413) msg = L.rejectedJs.replace('%s', res.status);
+      if (res.status === 400 && !res.body.trim()) msg = L.cutoffJs;
       else if (res.status === 502 || res.status === 503 || res.status === 504)
         msg = L.gatewayJs.replace('%s', res.status);
       else msg = L.rejectedJs.replace('%s', res.status);
@@ -674,7 +746,6 @@ $$('form').forEach(form => form.addEventListener('submit', async e => {
       return;
     }
 
-    const data = JSON.parse(res.body);
     if (data.ok) {
       const links = (data.files || []).map(f =>
         '<a class="dl" href="/download?id=' + encodeURIComponent(f.id) + '" download>↓ ' +
@@ -1051,6 +1122,10 @@ def render_page(cfg=None, page_token='', reports_on=False):
         'slowHintJs': t('web.js.slowhint'),
         'tooBigJs': t('web.js.too_big'), 'rejectedJs': t('web.js.rejected'),
         'gatewayJs': t('web.js.gateway'), 'droppedJs': t('web.js.dropped'),
+        'cutoffJs': t('web.js.cutoff'),
+        'prog': {k: t('web.prog.' + k) for k in
+                 ('queued', 'reading', 'aligning', 'retry', 'checking',
+                  'writing', 'eta', 'min', 'sec')},
     }, ensure_ascii=False)
     return (PAGE
             .replace('__CSS__', CSS)
@@ -1401,48 +1476,63 @@ class Handler(BaseHTTPRequestHandler):
     # sat queued behind their own abandoned attempt. One afternoon spent thirty
     # three minutes of that slot on two copies of a book nobody was waiting for.
     #
-    # So the headers go out at once and a single space follows every twenty
-    # seconds until the result is ready. JSON ignores leading whitespace, so
-    # the browser parses the payload as before; every proxy on the path sees a
-    # live connection; and a write that fails is the first reliable sign that
-    # the reader has left, at which point the job is told to stop.
+    # So the headers go out at once, and the response is a stream of lines:
+    # one JSON object per change in progress, then the result on the last
+    # line. Each progress line is also a keepalive -- every proxy on the path
+    # sees a live connection -- and a quiet stretch still gets a line every
+    # twenty seconds. The socket is checked every second for a reader who has
+    # hung up, and when one has, the job is told to stop.
+    #
+    # The progress itself is the point the reader sees. A spinner that sits
+    # still for several minutes looks exactly like a hung server, and people
+    # walked away from jobs that were nearly finished.
     KEEPALIVE = 20.0
-    #: How often to look at the socket for a reader who has left. Writing a
-    #: space is not a reliable test on its own: the first write after the far
-    #: end closes usually succeeds into the kernel's buffer, so a departure was
-    #: noticed one keepalive late -- 31 seconds on the deploy host, during which
-    #: the next reader sat queued behind a job nobody wanted. A closed peer
-    #: makes the socket readable with nothing to read, which can be checked
-    #: every second for nothing.
+    #: How often to look at the socket, and to send progress if it has moved.
+    #: A failed write is not a reliable test for a departed reader on its own:
+    #: the first write after the far end closes usually succeeds into the
+    #: kernel's buffer, so a departure used to be noticed one keepalive late --
+    #: 31 seconds on the deploy host, while the next reader sat queued behind
+    #: a job nobody wanted. A closed peer makes the socket readable with
+    #: nothing to read, which can be checked every second for nothing.
     POLL = 1.0
+
+    def _queue(self):
+        srv = self.server
+        if not hasattr(srv, 'queue'):
+            srv.queue, srv.queue_lock = [], threading.Lock()
+        return srv.queue, srv.queue_lock
 
     def _run_job(self, route, fields, files):
         log_path = getattr(self.server, 'error_log', None)
-        stop = threading.Event()
+        job = progress.Job()
         box = {}
         started = time.monotonic()
+        queue, queue_lock = self._queue()
+        with queue_lock:
+            queue.append(job)
 
         def work():
             # the slot is taken here, in the worker, so the request thread can
-            # keep the connection alive while this one waits its turn
+            # keep the connection alive and report the queue while this waits
             with self.server.slots:
-                if stop.is_set():
+                if job.stop.is_set():
                     # gave up while queued; do not start what nobody wants
                     self._log_failure(route, ClientGone(t('web.client_gone')))
                     return
                 diagnostics.mark_inflight(log_path, route,
                                           [p for _name, p in files.values()])
-                ae.set_cancel(stop)
+                token = progress.bind(job)
                 # redirected inside the slot: done before it, as it used to
                 # be, a queued request replaced stdout while another job was
                 # still printing into it, and stole its log
                 buf = io.StringIO()
                 real_stdout, sys.stdout = sys.stdout, buf
                 try:
+                    progress.stage('reading')
                     payload = getattr(self, '_do_' + route.rsplit('/', 1)[1])(fields, files)
                     payload['log'] = buf.getvalue().strip()
                     payload['ok'] = True
-                except ae.Cancelled:
+                except progress.Cancelled:
                     self._log_failure(route, ClientGone(t('web.client_gone')))
                     payload = None
                 except (UserFacing, SystemExit) as e:
@@ -1464,55 +1554,75 @@ class Handler(BaseHTTPRequestHandler):
                     self._log_failure(route, e)
                 finally:
                     sys.stdout = real_stdout
+                    progress.unbind(token)
                     diagnostics.clear_inflight(log_path)
                 box['payload'] = payload
 
         worker = threading.Thread(target=work, name='job', daemon=True)
 
         self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        # newline-delimited JSON: every line parses on its own, so the browser
+        # can act on each as it arrives and take the last as the result
+        self.send_header('Content-Type', 'application/x-ndjson; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
         # nginx buffers a proxied response by default, which would hold the
-        # spaces back and defeat the point; this turns that off for this
-        # response alone, without touching a configuration other sites share
+        # progress back until the end and defeat the point; this turns that
+        # off for this response alone, without touching a configuration other
+        # sites on the host share
         self.send_header('X-Accel-Buffering', 'no')
         self.end_headers()
         worker.start()
 
         gone = False
-        last_ping = time.monotonic()
-        while worker.is_alive():
-            worker.join(self.POLL)
-            if not worker.is_alive():
-                break
-            if self._peer_closed():
-                gone = True
-            elif time.monotonic() - last_ping >= self.KEEPALIVE:
-                gone = not self._ping()
-                last_ping = time.monotonic()
-            if gone:
-                stop.set()
-                break
+        sent_version, last_sent = -1, 0.0
+        try:
+            while worker.is_alive():
+                if job.stage == 'queued':
+                    with queue_lock:
+                        ahead = queue.index(job) if job in queue else 0
+                    if ahead != job.ahead:
+                        job.ahead = ahead
+                        job.version += 1
+                now = time.monotonic()
+                if job.version != sent_version or now - last_sent >= self.KEEPALIVE:
+                    sent_version = job.version
+                    if not self._line({'progress': job.snapshot()}):
+                        gone = True
+                    last_sent = now
+                if not gone and self._peer_closed():
+                    gone = True
+                if gone:
+                    job.stop.set()
+                    break
+                worker.join(self.POLL)
+        finally:
+            with queue_lock:
+                if job in queue:
+                    queue.remove(job)
 
         if gone:
             # the job notices within 64 rows; wait a moment so the slot is
             # back before this thread exits, but never indefinitely
             worker.join(60)
-            sys.stderr.write('job: reader left after %.0fs; stopped\n'
-                             % (time.monotonic() - started))
+            sys.stderr.write('job: reader left after %.0fs at %s; stopped\n'
+                             % (time.monotonic() - started, job.stage))
             return
 
         sys.stderr.write('job: done in %.0fs\n' % (time.monotonic() - started))
         payload = box.get('payload')
-        if payload is None:
-            return
-        try:
-            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
-            self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
-            # finished just as they left; the result is built and waiting in
+        if payload is not None:
+            # finished just as they left: the result is built and waiting in
             # their session, so nothing more is lost than the reply itself
-            pass
+            self._line(payload)
+
+    def _line(self, obj):
+        """One JSON object and a newline. False means nobody is listening."""
+        try:
+            self.wfile.write(json.dumps(obj, ensure_ascii=False).encode('utf-8') + b'\n')
+            self.wfile.flush()
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            return False
 
     def _peer_closed(self):
         """True once the reader has hung up.
@@ -1529,15 +1639,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.connection.recv(1, socket.MSG_PEEK) == b''
         except (OSError, ValueError):
             return True
-
-    def _ping(self):
-        """One byte down the wire. False means nobody is listening."""
-        try:
-            self.wfile.write(b' ')
-            self.wfile.flush()
-            return True
-        except (BrokenPipeError, ConnectionResetError, OSError):
-            return False
 
     # ---- the three operations ------------------------------------------- #
     def _do_merge(self, fields, files):

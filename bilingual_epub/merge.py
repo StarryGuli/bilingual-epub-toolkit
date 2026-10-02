@@ -10,7 +10,7 @@ import shutil
 import tempfile
 
 from . import align_engine as ae
-from . import epub_io
+from . import epub_io, progress
 from .errors import UserFacing
 
 try:
@@ -224,6 +224,7 @@ def merge_bilingual(a_epub, b_epub, out_path, workdir=None, blur='0.25em',
     own_workdir = workdir is None
     workdir = workdir or tempfile.mkdtemp(prefix='epubmerge_')
     try:
+        progress.stage('reading')
         docA = epub_io.load(a_epub, os.path.join(workdir, 'a'))
         docB = epub_io.load(b_epub, os.path.join(workdir, 'b'))
         lang_a = (docA.metadata['languages'] or ['und'])[0]
@@ -249,10 +250,12 @@ def merge_bilingual(a_epub, b_epub, out_path, workdir=None, blur='0.25em',
         raw_chapters = ae.split_into_chapters(beads, level)
 
         cc = _cc(cc_config)
+        progress.stage('writing', len(raw_chapters))
         stats = []
         chapters = []
         seen = 0
         for idx, (title_a, title_b, bead_slice) in enumerate(raw_chapters, 1):
+            progress.tick(idx - 1, len(raw_chapters))
             cid = 'ch%03d' % idx
             # bead indices are global; each chapter needs its own slice of them
             marks = {k - seen for k in shaky

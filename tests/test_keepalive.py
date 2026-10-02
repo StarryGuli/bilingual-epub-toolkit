@@ -23,7 +23,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from bilingual_epub import align_engine as ae
-from bilingual_epub import guard, webui
+from bilingual_epub import guard, progress, webui
 
 
 class _Open:
@@ -86,11 +86,15 @@ def _slow_job(seconds, started=None, stopped=None):
         if started is not None:
             started.set()
         end = time.monotonic() + seconds
+        steps = max(1, int(seconds * 100))
         try:
+            progress.stage('aligning', steps, attempt=1)
+            k = 0
             while time.monotonic() < end:
-                ae._check()
+                progress.tick(min(k, steps), steps)
+                k += 1
                 time.sleep(0.01)
-        except ae.Cancelled:
+        except progress.Cancelled:
             if stopped is not None:
                 stopped.set()
             raise
@@ -117,9 +121,11 @@ def test_a_slow_job_keeps_the_connection_alive(server, monkeypatch):
 
     head, _, body = data.partition(b'\r\n\r\n')
     assert b' 200 ' in head.split(b'\r\n')[0]
-    assert b'X-Accel-Buffering: no' in head, 'nginx would hold the spaces back'
-    assert body.startswith(b' '), 'no keepalive bytes were sent'
-    assert json.loads(body)['ok'] is True, 'leading spaces broke the JSON'
+    assert b'X-Accel-Buffering: no' in head, 'nginx would hold the progress back'
+    assert b'application/x-ndjson' in head
+    lines = [json.loads(line) for line in body.splitlines() if line.strip()]
+    assert any('progress' in o for o in lines), 'no progress was sent'
+    assert lines[-1].get('ok') is True, 'the last line is not the result'
 
     gaps = [b - a for a, b in zip(arrivals, arrivals[1:])]
     assert gaps and max(gaps) < 0.8, \
@@ -177,21 +183,21 @@ def test_a_quick_job_still_answers_normally(server, monkeypatch):
     headers = dict(line.split(': ', 1) for line in head.decode().split('\r\n')[1:])
     conn.request('POST', '/api/merge', body=body, headers=headers)
     res = conn.getresponse()
-    payload = json.loads(res.read())
-    assert res.status == 200 and payload['ok'] is True
+    lines = [json.loads(line) for line in res.read().splitlines() if line.strip()]
+    assert res.status == 200 and lines[-1]['ok'] is True
 
 
 def test_cancellation_reaches_the_real_aligner():
     """The stand-in above checks the flag; this proves the DP does too."""
-    stop = threading.Event()
-    stop.set()
-    token = ae.set_cancel(stop)
+    job = progress.Job()
+    job.stop.set()
+    token = progress.bind(job)
     try:
         a = [('p', 'Line %d %s' % (i, 'w' * (i % 30)), 'x') for i in range(500)]
         with pytest.raises(ae.Cancelled):
             ae.align(a, list(a))
     finally:
-        ae._cancel.reset(token)
+        progress.unbind(token)
 
 
 def test_a_departure_is_noticed_without_waiting_for_a_keepalive(server, monkeypatch):
@@ -216,3 +222,78 @@ def test_a_departure_is_noticed_without_waiting_for_a_keepalive(server, monkeypa
     assert stopped.wait(3), 'the departure went unnoticed until a keepalive'
     assert time.monotonic() - left < 1.5, \
         'took %.1fs to notice the reader had gone' % (time.monotonic() - left)
+
+
+# --------------------------------------------------------------------------- #
+# what the reader is shown while it runs
+# --------------------------------------------------------------------------- #
+
+def _read_stream(server, cookie, token, until=None):
+    sock = socket.create_connection(server.server_address, timeout=5)
+    sock.sendall(_post_bytes(server, cookie, token))
+    data = b''
+    sock.settimeout(10)
+    while True:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+        if until and until(data):
+            break
+    sock.close()
+    body = data.partition(b'\r\n\r\n')[2]
+    return [json.loads(line) for line in body.splitlines() if line.strip()]
+
+
+def test_progress_moves_forward_and_ends_in_a_result(server, monkeypatch):
+    monkeypatch.setattr(webui.Handler, '_do_merge', _slow_job(1.0))
+    cookie, token = _session(server)
+    lines = _read_stream(server, cookie, token)
+    seen = [o['progress'] for o in lines if 'progress' in o]
+    aligning = [p['done'] for p in seen if p['stage'] == 'aligning']
+    assert len(aligning) >= 3, 'too few updates to look alive: %r' % aligning
+    assert aligning == sorted(aligning), 'progress went backwards'
+    assert lines[-1]['ok'] is True
+
+
+def test_a_queued_reader_is_told_how_many_are_ahead(server, monkeypatch):
+    monkeypatch.setattr(webui.Handler, '_do_merge', _slow_job(0.2))
+    cookie, token = _session(server)
+    server.slots.acquire()                      # a job is already running
+    try:
+        q, lock = webui.Handler._queue(type('H', (), {'server': server})())
+        with lock:
+            q.append(object())                  # ...and it is in the queue
+        lines = _read_stream(server, cookie, token,
+                             until=lambda d: b'"queued"' in d)
+    finally:
+        with lock:
+            q.clear()
+        server.slots.release()
+    queued = [o['progress'] for o in lines
+              if 'progress' in o and o['progress']['stage'] == 'queued']
+    assert queued and queued[-1]['ahead'] == 1, queued
+
+
+def test_the_real_aligner_reports_progress():
+    job = progress.Job()
+    token = progress.bind(job)
+    seen = []
+    real_tick = progress.tick
+
+    def recording_tick(done, total):
+        seen.append((job.stage, done, total))
+        real_tick(done, total)
+
+    progress.tick = recording_tick
+    try:
+        a = [('p', 'Line %d %s' % (i, 'w' * (i % 30)), 'x') for i in range(300)]
+        beads = ae.align(a, list(a))
+        ae.confidence(a, list(a), beads)
+    finally:
+        progress.tick = real_tick
+        progress.unbind(token)
+    stages = [st for st, _d, _t in seen]
+    assert 'aligning' in stages and 'checking' in stages
+    checking = [d for st, d, _t in seen if st == 'checking']
+    assert checking == sorted(checking), 'the checking bar ran backwards'

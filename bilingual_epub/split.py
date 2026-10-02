@@ -14,7 +14,7 @@ import tempfile
 import uuid
 
 from . import align_engine as ae
-from . import epub_io
+from . import epub_io, progress
 from .errors import UserFacing
 
 PAGE = '''<?xml version="1.0" encoding="utf-8"?>
@@ -43,6 +43,7 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
     own_workdir = workdir is None
     workdir = workdir or tempfile.mkdtemp(prefix='epubsplit_')
     try:
+        progress.stage('reading')
         doc = epub_io.load(epub_path, os.path.join(workdir, 'src'))
         book_lang = (doc.metadata['languages'] or ['und'])[0]
 
@@ -63,7 +64,9 @@ def split_by_lang(epub_path, out_dir, langs=None, workdir=None):
         os.makedirs(out_dir, exist_ok=True)
         base = re.sub(r'[^\w.-]+', '_', os.path.splitext(os.path.basename(epub_path))[0])
         results = {}
-        for lang in keep:
+        progress.stage('writing', len(keep))
+        for done, lang in enumerate(keep):
+            progress.tick(done, len(keep))
             lang_blocks = [(tag, frag, lg) for tag, frag, lg in blocks
                            if (lg or 'und') == lang]
             if not lang_blocks:

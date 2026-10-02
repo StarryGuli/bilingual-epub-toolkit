@@ -2,7 +2,6 @@
 """Book-agnostic block extraction, Gale-Church paragraph alignment, and
 heading-based chapter splitting. None of this file knows what book it's
 looking at -- that's the whole point."""
-import contextvars
 import html as _html
 import math
 import os
@@ -12,6 +11,7 @@ from array import array
 
 from lxml import etree
 
+from . import progress
 from .errors import UserFacing
 
 XH = '{http://www.w3.org/1999/xhtml}'
@@ -178,10 +178,11 @@ def _align_banded(a_blocks, b_blocks, band):
 
     for i in range(n + 1):
         if not i & 63:
-            # cheap enough to do every 64 rows, and that is often enough: a
-            # job whose reader has gone stops within a second or so instead
-            # of holding the only slot for another quarter of an hour
-            _check()
+            # cheap enough to do every 64 rows, and that is often enough: the
+            # reader sees the bar move, and a job whose reader has gone stops
+            # within a second or so instead of holding the only slot for
+            # another quarter of an hour
+            progress.tick(i, n)
         cur = ring[i % 3]
         loi = lo[i]
         for off in range(width[i]):
@@ -261,7 +262,10 @@ def align(a_blocks, b_blocks):
         raise UserFacing('err.too_big' if _hosted() else 'err.too_big_local',
                          n, m)
 
+    attempt = 0
     while True:
+        attempt += 1
+        progress.stage('aligning', n, attempt=attempt)
         beads, touched = _align_banded(a_blocks, b_blocks, band)
         if beads is not None and not touched:
             return beads
@@ -383,27 +387,10 @@ MAX_CORRIDOR_BYTES = 160 * 1024 * 1024
 HOSTED_CORRIDOR_BYTES = 56 * 1024 * 1024
 
 
-class Cancelled(Exception):
-    """The job was abandoned; stop and give the slot back."""
-
-
-#: Set by whoever runs a job on behalf of someone who might leave. A context
-#: variable rather than a parameter, so it reaches the inner loops without
-#: threading a new argument through every signature between the web handler
-#: and the DP -- and rather than a global, so it belongs to the one thread
-#: doing that job and no other.
-_cancel = contextvars.ContextVar('bilingual_epub_cancel', default=None)
-
-
-def set_cancel(event):
-    """Make the current thread's alignment stop when `event` is set."""
-    return _cancel.set(event)
-
-
-def _check():
-    ev = _cancel.get()
-    if ev is not None and ev.is_set():
-        raise Cancelled()
+#: The aligner reports into whatever job is bound to this thread, and stops
+#: when that job is abandoned. See progress.py; re-exported here because the
+#: web handler catches it by this name.
+Cancelled = progress.Cancelled
 
 
 def _hosted():
@@ -486,9 +473,10 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     # optimum, which is arithmetically impossible and was the tell.
     fwd = [array('d', [INF]) * w for w in width]
     fwd[0][0 - lo[0]] = 0.0
+    progress.stage('checking', 2 * n + 2)
     for i in range(n + 1):
         if not i & 63:
-            _check()
+            progress.tick(i, 2 * n + 2)
         row, loi = fwd[i], lo[i]
         for off in range(width[i]):
             base = row[off]
@@ -508,7 +496,7 @@ def confidence(a_blocks, b_blocks, beads, band=40):
     bwd[n][m - lo[n]] = 0.0
     for i in range(n, -1, -1):
         if not i & 63:
-            _check()
+            progress.tick(2 * n + 1 - i, 2 * n + 2)
         row, loi = bwd[i], lo[i]
         for off in range(width[i] - 1, -1, -1):
             j = loi + off

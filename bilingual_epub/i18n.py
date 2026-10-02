@@ -512,8 +512,33 @@ STRINGS = {
     # so a literal percent sign must not be doubled
     'web.js.uploading':  ('Uploading %s% — %s of %s MB',
                           '上传中 %s% —— %s / %s MB'),
-    'web.js.working':    ('Uploaded. Aligning the book, this is the slow part…',
-                          '传完了，正在对齐段落，这步最慢…'),
+    'web.js.working':    ('Uploaded. Starting…', '已上传，正在开始…'),
+    # ---- live progress, one line per stage --------------------------------
+    # Consumed by the page's script with .replace('%s', ...), never by Python
+    # %-formatting, so a literal percent sign is written once: '%s%' -- the
+    # doubled form shows up on screen as two percent signs.
+    'web.prog.queued':   ('Waiting for %s job(s) ahead of yours to finish…',
+                          '排队中：前面还有 %s 个任务…'),
+    'web.prog.reading':  ('Reading the books…', '正在读取书籍…'),
+    'web.prog.aligning': ('Matching paragraphs — %s%',
+                          '正在对齐段落 —— %s%'),
+    'web.prog.retry':    ('The two editions differ more than expected, so the '
+                          'match is being redone with more room (pass %s) — %s%',
+                          '两个版本的出入比预想的大，正在放宽范围重新对齐'
+                          '（第 %s 遍）—— %s%'),
+    'web.prog.checking': ('Checking how sure each match is — %s%',
+                          '正在检查每处对齐的把握 —— %s%'),
+    'web.prog.writing':  ('Building the book — %s%', '正在生成电子书 —— %s%'),
+    'web.prog.eta':      ('about %s left', '约剩 %s'),
+    'web.prog.min':      ('%s min', '%s 分钟'),
+    'web.prog.sec':      ('%s s', '%s 秒'),
+    #: A 400 with an empty body comes from the gateway, not from this program,
+    #: and on the hosted instance it meant an upload cut off part-way --
+    #: Android phones, all three. Calling it "probably too large" was wrong.
+    'web.js.cutoff':     ('The upload was cut off before it finished. On a weak '
+                          'connection, try again somewhere the signal is steadier.',
+                          '上传在完成前被中断了。如果网络不稳定，请换个信号好些的'
+                          '地方重试。'),
     #: The slow part is aligning, not the network, and "leaving cancels it"
     #: was not true until abandoned jobs were actually stopped.
     'web.js.slowhint':   ('Long books can take several minutes to align. Keep '
